@@ -1,0 +1,33 @@
+set_setting:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: solar_assistant
+    topic:
+      required: true
+      example: "inverter_1/grid_charge_current"
+      selector:
+        text:
+    value:
+      required: true
+      example: "100"
+      selector:
+        text:
+
+start_topoff:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: solar_assistant
+
+stop_topoff:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: solar_assistant

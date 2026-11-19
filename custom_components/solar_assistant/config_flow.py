@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import fnmatch
+import ipaddress
 import logging
 from typing import Any
 
@@ -15,6 +16,7 @@ from homeassistant.config_entries import (
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import section
 from homeassistant.helpers import selector
+from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 # Inner field name used inside every section. Its label is rendered as
 # "Add metric" via translations, regardless of which section it lives in.
@@ -41,6 +43,12 @@ from .const import (
     CONF_ENABLED_TOPICS,
     CONF_HOST,
     CONF_LOCAL_IP,
+    CONF_MIN_UPDATE_INTERVAL,
+    CONF_SPREAD_ALERT,
+    CONF_STALE_AFTER,
+    DEFAULT_MIN_UPDATE_INTERVAL,
+    DEFAULT_SPREAD_ALERT,
+    DEFAULT_STALE_AFTER,
     CONF_PASSWORD,
     CONF_SITE_ID,
     CONF_SITE_KEY,
@@ -62,6 +70,8 @@ class SolarAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
     MINOR_VERSION = 2
 
+    _discovered_host: str | None = None
+
     def __init__(self) -> None:
         self._api_key: str | None = None
         self._sites: list[Any] = []
@@ -81,6 +91,37 @@ class SolarAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user",
             menu_options=["local", "cloud"],
         )
+
+    # -- Discovery: the unit advertises _solar-assistant._tcp with its site_id (upstream issue #16) --
+
+    async def async_step_zeroconf(
+        self, discovery_info: ZeroconfServiceInfo
+    ) -> ConfigFlowResult:
+        host = str(discovery_info.ip_address)
+        if discovery_info.ip_address.version != 4:
+            return self.async_abort(reason="not_ipv4")
+        try:
+            site_id = int(discovery_info.properties.get("site_id"))
+        except (TypeError, ValueError):
+            site_id = None
+        if site_id is not None:
+            for entry in self._async_current_entries(include_ignore=False):
+                if str(entry.data.get(CONF_SITE_ID)) != str(site_id):
+                    continue
+                if (
+                    entry.data.get(CONF_AUTH_METHOD, AUTH_LOCAL) == AUTH_LOCAL
+                    and _is_ip(entry.data.get(CONF_HOST, ""))
+                    and entry.data.get(CONF_HOST) != host
+                ):
+                    # The same unit on a new address: a hostname stays as the user typed it.
+                    self.hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_HOST: host})
+                    self.hass.config_entries.async_schedule_reload(entry.entry_id)
+                return self.async_abort(reason="already_configured")
+        await self.async_set_unique_id(f"local:{host}")
+        self._abort_if_unique_id_configured()
+        self._discovered_host = host
+        self.context["title_placeholders"] = {"host": host}
+        return await self.async_step_local()
 
     # -- Path A: local password --
 
@@ -131,7 +172,7 @@ class SolarAssistantConfigFlow(ConfigFlow, domain=DOMAIN):
                     data=data,
                 )
 
-        default_host = (
+        default_host = self._discovered_host or (
             DEFAULT_LOCAL_HOST
             if not self.hass.config_entries.async_entries(DOMAIN)
             else ""
@@ -364,12 +405,20 @@ class SolarAssistantOptionsFlow(OptionsFlow):
                 inner = user_input.get(sec["key"]) or {}
                 selected.extend(inner.get(_SECTION_FIELD, []) or [])
             selected.extend(_globs_not_offered(current_globs, form_sections))
-            return self.async_create_entry(
-                title="",
-                data={CONF_ENABLED_TOPICS: sorted(set(selected))},
-            )
+            data: dict[str, Any] = {CONF_ENABLED_TOPICS: sorted(set(selected))}
+            for key, default, *_ in _NUMBER_OPTIONS:
+                # An absent field keeps its current value, as an absent section does.
+                data[key] = float(user_input.get(key, self._entry.options.get(key, default)))
+            return self.async_create_entry(title="", data=data)
 
         schema_dict: dict[Any, Any] = {}
+        for key, default, lo, hi, step, unit in _NUMBER_OPTIONS:
+            schema_dict[vol.Optional(key, default=self._entry.options.get(key, default))] = selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=lo, max=hi, step=step, unit_of_measurement=unit,
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            )
         for sec in form_sections.values():
             choices = sec["choices"]
             default = [g for g in choices if any(_overlaps(g, c) for c in current_globs)]
@@ -415,6 +464,13 @@ class SolarAssistantOptionsFlow(OptionsFlow):
             site_key=d.get(CONF_SITE_KEY, ""),
         )
 
+
+# Number options besides the topic selection: key, default, min, max, step, unit.
+_NUMBER_OPTIONS = (
+    (CONF_MIN_UPDATE_INTERVAL, DEFAULT_MIN_UPDATE_INTERVAL, 0, 300, 1, "s"),
+    (CONF_STALE_AFTER, DEFAULT_STALE_AFTER, 0, 1440, 1, "min"),
+    (CONF_SPREAD_ALERT, DEFAULT_SPREAD_ALERT, 1, 100, 1, "%"),
+)
 
 # Group ordering used for non-totals sections. Groups not in this list are
 # appended in alphabetical order so a future "Diagnostics" group still appears.
@@ -504,6 +560,14 @@ def _prefix_template(topic: str) -> str:
         if last.isdigit():
             return f"{stem}_*/"
     return f"{prefix}/"
+
+
+def _is_ip(host: str) -> bool:
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
 
 
 def _mdns_site_id_sync(zc: Any, host: str) -> int | None:

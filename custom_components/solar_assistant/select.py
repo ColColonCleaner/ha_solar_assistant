@@ -8,25 +8,32 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import DOMAIN
-from .coordinator import SolarAssistantCoordinator
+from .coordinator import SolarAssistantConfigEntry, SolarAssistantCoordinator
 from .entity import SolarAssistantMetricEntity
-from .precision import is_time_metric, select_options
+from .precision import is_time_metric, is_toggle_metric, select_options
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def _is_for_us(defn: dict[str, Any] | None) -> bool:
-    """A select metric, except a time of day, which the time platform owns."""
-    return defn is not None and defn.get("platform") == "select" and not is_time_metric(defn)
+    """A select metric, except a time of day (time platform) and an Enabled/Disabled toggle (switch platform)."""
+    return (
+        defn is not None
+        and defn.get("platform") == "select"
+        and not is_time_metric(defn)
+        and not is_toggle_metric(defn)
+    )
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant,
+    entry: SolarAssistantConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    coordinator: SolarAssistantCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
     known: set[str] = set()
 
     @callback

@@ -8,11 +8,11 @@ from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import topoff_entities
 from .const import DOMAIN
-from .coordinator import SolarAssistantCoordinator
+from .coordinator import SolarAssistantConfigEntry, SolarAssistantCoordinator
 from .entity import SolarAssistantMetricEntity
 from .precision import format_setting, metric_unit, number_step, parse_numeric
 
@@ -20,9 +20,11 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant,
+    entry: SolarAssistantConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    coordinator: SolarAssistantCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
     async_add_entities(topoff_entities.numbers(coordinator.topoff, entry))
     known: set[str] = set()
 

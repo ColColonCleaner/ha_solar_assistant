@@ -11,6 +11,7 @@ from homeassistant.helpers.entity import DeviceInfo, Entity, EntityCategory
 
 from .const import DOMAIN
 from .coordinator import SolarAssistantCoordinator
+from .health import device_details
 
 
 def unit_device_info(entry: ConfigEntry, sw_version: str | None = None) -> DeviceInfo:
@@ -91,6 +92,11 @@ class SolarAssistantMetricEntity(Entity):
                 name=device_label,
                 manufacturer="SolarAssistant",
             )
+            # Model, serial number and firmware from the Info metrics of the
+            # device, when the unit reports them (upstream issue #11).
+            details = device_details(coordinator.definitions, coordinator.data, topic.split("/", 1)[0])
+            for key, value in details.items():
+                self._attr_device_info[key] = value
 
     @property
     def available(self) -> bool:

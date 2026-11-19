@@ -7,11 +7,11 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from . import topoff_entities
+from . import derived_entities, topoff_entities
 from .const import DOMAIN
-from .coordinator import SolarAssistantCoordinator
+from .coordinator import SolarAssistantConfigEntry, SolarAssistantCoordinator
 from .entity import SolarAssistantMetricEntity
 from .precision import is_numeric_metric, metric_unit, parse_numeric, sensor_display_precision
 
@@ -32,10 +32,13 @@ def _is_for_us(defn: dict[str, Any]) -> bool:
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant,
+    entry: SolarAssistantConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    coordinator: SolarAssistantCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
     async_add_entities(topoff_entities.sensors(coordinator.topoff, entry))
+    async_add_entities(derived_entities.spread_sensors(coordinator, entry))
     known: set[str] = set()
 
     @callback

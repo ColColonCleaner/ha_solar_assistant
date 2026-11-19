@@ -1,3 +1,23 @@
+## v0.4.0 (fork ColColonCleaner/ha_solar_assistant)
+
+### Feat
+
+- **switch**: each select with the options Enabled and Disabled is a switch
+- **services**: the actions set_setting (with verify), start_topoff and stop_topoff
+- **diagnostics**: a download of every topic with its definition, options and value, credentials redacted
+- **sensor**: Battery SOC spread, the largest pack SOC minus the smallest, and a Battery SOC spread alert
+- **binary_sensor**: a Data sensor per inverter and battery, off when the device sent no changed value for a set time (#14)
+- **options**: a minimum update interval per sensor, with an immediate update at a zero crossing (#24, #27), the stale time and the spread alert
+- **config-flow**: zeroconf discovery, which also updates the IP of a known unit (#16)
+- **repairs**: a repair issue when a write or a top-off fails
+- **devices**: model, serial number and firmware from the Info metrics (#11)
+- **entities**: entry.runtime_data, AddConfigEntryEntitiesCallback and translated names of the top-off entities
+
+### Fix
+
+- **topoff**: the result of a manual stop says "stopped by Stop top-off", not "finished"
+- **number**: inverter_1/smart_load_start_pv_power is kW, which SolarAssistant labels W
+
 ## v0.3.1 (fork ColColonCleaner/ha_solar_assistant)
 
 ### Feat

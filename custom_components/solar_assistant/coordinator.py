@@ -14,7 +14,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.event import async_call_later
 from homeassistant.util.dt import utcnow
 
 from py_solar_assistant import (
@@ -40,6 +42,11 @@ from .const import (
     CONF_ENABLED_TOPICS,
     CONF_HOST,
     CONF_LOCAL_IP,
+    CONF_MIN_UPDATE_INTERVAL,
+    CONF_STALE_AFTER,
+    DEFAULT_MIN_UPDATE_INTERVAL,
+    DEFAULT_STALE_AFTER,
+    DOMAIN,
     CONF_PASSWORD,
     CONF_SITE_ID,
     CONF_SITE_KEY,
@@ -60,6 +67,7 @@ from .const import (
     signal_metric_update,
     signal_new_metric,
 )
+from .health import device_prefix, should_dispatch
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -85,6 +93,11 @@ class SolarAssistantCoordinator:
         self._last_cloud_auth_at: datetime | None = None
         # The battery top-off of this entry (topoff_manager.TopOffManager)
         self.topoff: Any = None
+        # Update throttling and staleness
+        self._last_dispatch: dict[str, float] = {}
+        self._pending: set[str] = set()
+        self._flush_unsub: Any = None
+        self.last_change: dict[str, datetime] = {}
         # Setting writes
         self._write_lock = asyncio.Lock()
         self._verify_writes = True
@@ -122,6 +135,9 @@ class SolarAssistantCoordinator:
 
     async def async_stop(self) -> None:
         self._stopping = True
+        if self._flush_unsub is not None:
+            self._flush_unsub()
+            self._flush_unsub = None
         if self._task:
             self._task.cancel()
             try:
@@ -355,6 +371,28 @@ class SolarAssistantCoordinator:
         a 5xx or a lost connection.
         """
         text = str(value)
+        try:
+            await self._write_with_retries(topic, text)
+        except HomeAssistantError as err:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                self._write_issue_id(topic),
+                is_fixable=False,
+                is_persistent=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="write_failed",
+                translation_placeholders={
+                    "title": self.entry.title, "topic": topic, "value": text, "error": str(err),
+                },
+            )
+            raise
+        ir.async_delete_issue(self.hass, DOMAIN, self._write_issue_id(topic))
+
+    def _write_issue_id(self, topic: str) -> str:
+        return f"write_failed_{self.entry.entry_id}_{topic.replace('/', '_')}"
+
+    async def _write_with_retries(self, topic: str, text: str) -> None:
         async with self._write_lock:
             last_err: Exception | None = None
             for attempt in range(1, WRITE_ATTEMPTS + 1):
@@ -454,11 +492,67 @@ class SolarAssistantCoordinator:
             return
         topic = m.topic
         is_new = topic not in self.definitions
+        previous = self.data.get(topic)
         self.definitions[topic] = _defn_for(m)
         self.data[topic] = m.value
+        self._note_change(topic, previous, m.value, is_new)
         if is_new:
             async_dispatcher_send(self.hass, self.signal_new_metric, topic)
+            self._dispatch(topic)
+            return
+        now = self.hass.loop.time()
+        if should_dispatch(
+            now,
+            self._last_dispatch.get(topic),
+            self.min_update_interval,
+            previous,
+            m.value,
+            self.definitions[topic].get("platform"),
+        ):
+            self._dispatch(topic)
+        else:
+            self._defer(topic)
+
+    @property
+    def min_update_interval(self) -> float:
+        """The least time between two updates of one sensor, 0 for no limit (upstream issue #24)."""
+        return float(self.entry.options.get(CONF_MIN_UPDATE_INTERVAL, DEFAULT_MIN_UPDATE_INTERVAL) or 0)
+
+    @property
+    def stale_after(self) -> float:
+        """Minutes without a changed value before a device counts as stale (upstream issue #14)."""
+        return float(self.entry.options.get(CONF_STALE_AFTER, DEFAULT_STALE_AFTER) or 0)
+
+    @callback
+    def _dispatch(self, topic: str) -> None:
+        self._last_dispatch[topic] = self.hass.loop.time()
+        self._pending.discard(topic)
         async_dispatcher_send(self.hass, self.signal_metric_update, topic)
+
+    @callback
+    def _defer(self, topic: str) -> None:
+        """Hold back an update, and send the newest value when the interval ends."""
+        self._pending.add(topic)
+        if self._flush_unsub is None:
+            self._flush_unsub = async_call_later(self.hass, self.min_update_interval, self._flush)
+
+    @callback
+    def _flush(self, _now: Any) -> None:
+        self._flush_unsub = None
+        for topic in list(self._pending):
+            self._dispatch(topic)
+
+    @callback
+    def _note_change(self, topic: str, previous: Any, value: Any, is_new: bool) -> None:
+        """Record when a device last sent a changed value."""
+        prefix = device_prefix(topic)
+        if prefix is None:
+            return
+        if is_new or previous != value or prefix not in self.last_change:
+            self.last_change[prefix] = utcnow()
+
+
+type SolarAssistantConfigEntry = ConfigEntry[SolarAssistantCoordinator]
 
 
 class _ReauthRequired(Exception):

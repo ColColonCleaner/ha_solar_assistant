@@ -67,6 +67,14 @@ _MAX_STEP_DECIMALS = 3
 # Units that SolarAssistant gives to a text value.
 _TEXT_UNITS = frozenset({"hhmm"})
 
+# Units that the Luxpower driver of SolarAssistant 2026-08-25 labels wrong, by
+# topic suffix: (the unit sent, the unit of the value). The smart load start PV
+# power of an EG4 12000XP holds kW (register 217 _12K_HOLD_START_PV_POWER), and
+# SolarAssistant sends W with the range 0 to 25.5.
+_UNIT_FIXES: dict[str, tuple[str, str]] = {
+    "/smart_load_start_pv_power": ("W", "kW"),
+}
+
 _NUMBER_PREFIX = re.compile(r"^\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)")
 _HHMM = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
@@ -111,6 +119,10 @@ def metric_unit(defn: dict[str, Any]) -> str | None:
     unit = defn.get("unit_of_measurement") or defn.get("unit") or None
     if unit in _TEXT_UNITS:
         return None
+    topic = str(defn.get("topic") or "")
+    for suffix, (wrong, right) in _UNIT_FIXES.items():
+        if topic.endswith(suffix) and unit == wrong:
+            return right
     return unit
 
 
@@ -179,6 +191,33 @@ def is_time_metric(defn: dict[str, Any]) -> bool:
         return False
     options = defn.get("options") or []
     return bool(options) and all(isinstance(o, str) and _HHMM.match(o) for o in options)
+
+
+_ON_WORDS = ("enabled", "enable", "on", "yes", "true")
+_OFF_WORDS = ("disabled", "disable", "off", "no", "false")
+
+
+def toggle_options(defn: dict[str, Any]) -> tuple[str, str] | None:
+    """The (on, off) options of a select that is a toggle, or None.
+
+    A select with exactly two options, one of them Enabled and the other
+    Disabled, ignoring case, is a switch in Home Assistant.
+    """
+    if defn.get("platform") != "select":
+        return None
+    options = [o for o in (defn.get("options") or []) if isinstance(o, str)]
+    if len(options) != 2:
+        return None
+    on = [o for o in options if o.strip().casefold() in _ON_WORDS]
+    off = [o for o in options if o.strip().casefold() in _OFF_WORDS]
+    if len(on) == 1 and len(off) == 1:
+        return on[0], off[0]
+    return None
+
+
+def is_toggle_metric(defn: dict[str, Any]) -> bool:
+    """Whether a select metric is a toggle, which the switch platform owns."""
+    return toggle_options(defn) is not None
 
 
 def parse_hhmm(value: Any) -> time | None:

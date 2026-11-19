@@ -17,6 +17,7 @@ from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.storage import Store
@@ -112,6 +113,7 @@ class TopOffManager:
             setattr(self.settings, name, value)
         if changes.get("enabled") is False and self.status.state == t.STATE_ERROR and not self.status.saved:
             self.status.last_error = None
+            ir.async_delete_issue(self.hass, DOMAIN, self._issue_id)
         self._save()
         await self.async_tick()
 
@@ -137,7 +139,15 @@ class TopOffManager:
             if action == t.ACTION_START:
                 await self._start(now)
             elif action == t.ACTION_RESTORE:
-                await self._restore(state, now)
+                if stop_now:
+                    why = "stopped by Stop top-off"
+                elif not self.settings.enabled:
+                    why = "stopped by the switch"
+                elif state == t.STATE_ERROR:
+                    why = "stopped at the time limit"
+                else:
+                    why = "finished"
+                await self._restore(state, now, why)
             else:
                 if state == t.STATE_HOLDING and self.status.state == t.STATE_CHARGING:
                     self.status.full_since = now
@@ -176,6 +186,7 @@ class TopOffManager:
         self.status.full_since = None
         self.status.state = t.STATE_CHARGING
         self.status.last_error = None
+        ir.async_delete_issue(self.hass, DOMAIN, self._issue_id)
         await self._store.async_save(self._data())
         for topic, value in t.apply_values(inv, self.settings.current_a, time_opt, enable_opt):
             if str(data.get(topic)) == value:
@@ -191,7 +202,7 @@ class TopOffManager:
             f"Saved settings: {saved}"
         )
 
-    async def _restore(self, state: str, now: datetime) -> None:
+    async def _restore(self, state: str, now: datetime, why: str) -> None:
         failed: list[str] = []
         for topic, value in t.restore_values(self.status.inverter, self.status.saved):
             if str(self.coordinator.data.get(topic)) == value:
@@ -201,29 +212,47 @@ class TopOffManager:
             except HomeAssistantError as err:
                 failed.append(f"{topic} = {value}: {err}")
         if failed:
-            self.status.state = t.STATE_ERROR
-            self.status.last_error = "restore failed, retried each minute: " + "; ".join(failed)
-            self._notify(f"Battery top-off could not restore the inverter settings: {failed}")
+            self._fail("restore failed, retried each minute: " + "; ".join(failed))
             return
         started = self.status.started_at
         self.status.saved = {}
         self.status.started_at = None
         self.status.full_since = None
         self.status.state = state
-        took = f" after {now - started}" if started else ""
+        minutes = round((now - started).total_seconds() / 60) if started else None
+        took = f" after {minutes} min" if minutes is not None else ""
         if state == t.STATE_ERROR:
-            self.status.last_error = self.status.last_error or (
-                f"the batteries did not reach {self.settings.full_soc}% within {self.settings.time_limit_hours} h"
+            self.status.last_error = (
+                f"the batteries did not reach {self.settings.full_soc:g}% within {self.settings.time_limit_hours:g} h"
             )
-            self.status.last_result = f"stopped{took}: {self.status.last_error}"
+            self.status.last_result = f"{why}{took}: {self.status.last_error}"
+            self._raise_issue(self.status.last_error)
         else:
-            self.status.last_result = f"finished{took}, at {now.isoformat(timespec='minutes')}"
+            self.status.last_result = f"{why}{took}"
+            ir.async_delete_issue(self.hass, DOMAIN, self._issue_id)
         self._notify(f"Battery top-off {self.status.last_result}. The inverter settings are restored.")
+
+    @property
+    def _issue_id(self) -> str:
+        return f"topoff_failed_{self.entry.entry_id}"
+
+    def _raise_issue(self, reason: str) -> None:
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            self._issue_id,
+            is_fixable=False,
+            is_persistent=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key="topoff_failed",
+            translation_placeholders={"title": self.entry.title, "reason": reason},
+        )
 
     def _fail(self, reason: str) -> None:
         _LOGGER.warning("Battery top-off: %s", reason)
         self.status.state = t.STATE_ERROR
         self.status.last_error = reason
+        self._raise_issue(reason)
         self._notify(f"Battery top-off error: {reason}")
 
     def _notify(self, message: str) -> None:

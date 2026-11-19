@@ -60,8 +60,28 @@ WRITE_RETRY_DELAY_S = 2
 # With verify, the unit reads the value back and writes it again until it holds.
 WRITE_TIMEOUT_S = 30
 
-# The unique ID of each top-off entity is "<entry unique ID>_topoff_<key>".
+# The unique ID of each entity that the integration makes itself, and that no
+# metric topic backs, is "<entry unique ID>_<prefix><key>".
 TOPOFF_UNIQUE_PREFIX = "topoff_"
+DERIVED_UNIQUE_PREFIX = "derived_"
+HEALTH_UNIQUE_PREFIX = "health_"
+LOCAL_UNIQUE_PREFIXES = (TOPOFF_UNIQUE_PREFIX, DERIVED_UNIQUE_PREFIX, HEALTH_UNIQUE_PREFIX)
+
+# Options of the entry, besides the topic selection
+CONF_MIN_UPDATE_INTERVAL = "min_update_interval_s"
+CONF_STALE_AFTER = "stale_after_min"
+CONF_SPREAD_ALERT = "soc_spread_alert_pct"
+DEFAULT_MIN_UPDATE_INTERVAL = 0
+DEFAULT_STALE_AFTER = 10
+DEFAULT_SPREAD_ALERT = 10
+
+# Actions
+SERVICE_SET_SETTING = "set_setting"
+SERVICE_START_TOPOFF = "start_topoff"
+SERVICE_STOP_TOPOFF = "stop_topoff"
+ATTR_CONFIG_ENTRY_ID = "config_entry_id"
+ATTR_TOPIC = "topic"
+ATTR_VALUE = "value"
 
 MDNS_SERVICE_TYPE = "_solar-assistant._tcp.local."
 MDNS_SCAN_TIMEOUT_S = 5

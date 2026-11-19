@@ -1,5 +1,6 @@
 {
   "config": {
+    "flow_title": "SolarAssistant ({host})",
     "step": {
       "user": {
         "title": "SolarAssistant",
@@ -49,6 +50,7 @@
     },
     "abort": {
       "already_configured": "This SolarAssistant unit is already configured.",
+      "not_ipv4": "The unit was discovered on an address that is not IPv4.",
       "all_sites_configured": "All sites on your account are already configured."
     }
   },
@@ -58,6 +60,16 @@
         "title": "Configuration",
         "description": "## Metrics",
         "submit": "Save",
+        "data": {
+          "min_update_interval_s": "Minimum update interval",
+          "stale_after_min": "Data stale after",
+          "soc_spread_alert_pct": "Battery SOC spread alert above"
+        },
+        "data_description": {
+          "min_update_interval_s": "The least time between two updates of one sensor, to cut recorder writes. A value that crosses zero updates at once. 0 turns the limit off.",
+          "stale_after_min": "Each inverter and battery has a Data sensor that turns off when the device sent no changed value for this time. 0 turns the check off.",
+          "soc_spread_alert_pct": "Battery SOC spread alert turns on when the largest pack SOC minus the smallest exceeds this."
+        },
         "sections": {
           "totals": {
             "name": "Totals",
@@ -106,8 +118,84 @@
   },
   "entity": {
     "binary_sensor": {
-      "connection": {
-        "name": "Connection"
+      "connection": {"name": "Connection"},
+      "data": {"name": "Data"},
+      "soc_spread_alert": {"name": "Battery SOC spread alert"}
+    },
+    "button": {
+      "topoff_start": {"name": "Start top-off"},
+      "topoff_stop": {"name": "Stop top-off"}
+    },
+    "number": {
+      "topoff_interval_days": {"name": "Top-off interval"},
+      "topoff_current_a": {"name": "Top-off charge current"},
+      "topoff_full_soc": {"name": "Top-off full charge"},
+      "topoff_hold_minutes": {"name": "Top-off hold time"},
+      "topoff_time_limit_hours": {"name": "Top-off time limit"}
+    },
+    "sensor": {
+      "soc_spread": {"name": "Battery SOC spread"},
+      "topoff_state": {
+        "name": "Top-off state",
+        "state": {
+          "disabled": "Disabled",
+          "idle": "Idle",
+          "waiting": "Waiting for the window",
+          "charging": "Charging",
+          "holding": "Holding at full",
+          "error": "Error"
+        }
+      },
+      "topoff_last_full": {"name": "Last full charge"},
+      "topoff_next_due": {"name": "Next top-off due"}
+    },
+    "switch": {
+      "topoff_enabled": {"name": "Battery top-off"}
+    },
+    "time": {
+      "topoff_window_start": {"name": "Top-off window start"},
+      "topoff_window_end": {"name": "Top-off window end"}
+    }
+  },
+  "exceptions": {
+    "entry_not_found": {"message": "No SolarAssistant entry has the ID {entry_id}."},
+    "entry_not_loaded": {"message": "The SolarAssistant entry {title} is not loaded."},
+    "not_a_setting": {"message": "{topic} is no writable setting of this unit."},
+    "invalid_option": {"message": "{value} is no option of {topic}. The options are: {options}."},
+    "topoff_disabled": {"message": "Turn on the switch Battery top-off first."}
+  },
+  "issues": {
+    "topoff_failed": {
+      "title": "Battery top-off failed on {title}",
+      "description": "The battery top-off stopped with an error: {reason}. It waits for Start top-off, or for the switch Battery top-off to go off and on."
+    },
+    "write_failed": {
+      "title": "A setting write failed on {title}",
+      "description": "SolarAssistant did not apply {topic} = {value}: {error}. The issue goes when a write of {topic} succeeds."
+    }
+  },
+  "services": {
+    "set_setting": {
+      "name": "Set setting",
+      "description": "Writes one setting of the inverter or the battery, and has the unit read it back until it holds.",
+      "fields": {
+        "config_entry_id": {"name": "SolarAssistant unit", "description": "The SolarAssistant entry."},
+        "topic": {"name": "Topic", "description": "The topic of the setting, such as inverter_1/grid_charge_current."},
+        "value": {"name": "Value", "description": "The new value, as SolarAssistant writes it, such as 100 or Enabled."}
+      }
+    },
+    "start_topoff": {
+      "name": "Start top-off",
+      "description": "Starts a battery top-off now, outside the window. The switch Battery top-off must be on.",
+      "fields": {
+        "config_entry_id": {"name": "SolarAssistant unit", "description": "The SolarAssistant entry."}
+      }
+    },
+    "stop_topoff": {
+      "name": "Stop top-off",
+      "description": "Stops a running battery top-off and writes back the saved settings.",
+      "fields": {
+        "config_entry_id": {"name": "SolarAssistant unit", "description": "The SolarAssistant entry."}
       }
     }
   }

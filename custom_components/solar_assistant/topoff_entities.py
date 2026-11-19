@@ -44,9 +44,11 @@ class TopOffEntity(Entity):
     _attr_has_entity_name = True
 
     def __init__(self, manager: TopOffManager, entry: ConfigEntry, key: str, name: str) -> None:
+        # The name comes from strings.json, entity.<platform>.topoff_<key>. The
+        # argument name only documents the English name at the call site.
         self._manager = manager
         self._attr_unique_id = f"{entry.unique_id}_{TOPOFF_UNIQUE_PREFIX}{key}"
-        self._attr_name = name
+        self._attr_translation_key = f"{TOPOFF_UNIQUE_PREFIX}{key}"
         self._attr_device_info = unit_device_info(entry)
 
     async def async_added_to_hass(self) -> None:

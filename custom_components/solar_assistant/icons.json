@@ -1,0 +1,7 @@
+{
+  "services": {
+    "set_setting": {"service": "mdi:tune-variant"},
+    "start_topoff": {"service": "mdi:battery-charging-high"},
+    "stop_topoff": {"service": "mdi:battery-off-outline"}
+  }
+}

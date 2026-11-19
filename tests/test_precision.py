@@ -103,6 +103,29 @@ class Times(unittest.TestCase):
         self.assertEqual(p.format_hhmm(time(7, 5)), "07:05")
 
 
+class Toggles(unittest.TestCase):
+    def test_enabled_disabled_is_a_toggle(self):
+        self.assertEqual(p.toggle_options({"platform": "select", "options": ["Disabled", "Enabled"]}),
+                         ("Enabled", "Disabled"))
+        self.assertTrue(p.is_toggle_metric({"platform": "select", "options": ["enabled", "DISABLED"]}))
+
+    def test_other_selects_are_not(self):
+        self.assertIsNone(p.toggle_options({"platform": "select", "options": ["Time", "State of charge"]}))
+        self.assertIsNone(p.toggle_options({"platform": "select", "options": ["Enabled", "Disabled", "Auto"]}))
+        self.assertIsNone(p.toggle_options({"platform": "select", "options": ["Enabled", "Enabled"]}))
+        self.assertIsNone(p.toggle_options({"platform": "number", "options": ["Enabled", "Disabled"]}))
+
+
+class UnitFixes(unittest.TestCase):
+    def test_smart_load_pv_power_is_kw(self):
+        defn = {"topic": "inverter_1/smart_load_start_pv_power", "unit": "W", "min": 0, "max": 25.5}
+        self.assertEqual(p.metric_unit(defn), "kW")
+        self.assertEqual(p.number_step(defn, 0.0), 0.1)
+
+    def test_other_topics_keep_their_unit(self):
+        self.assertEqual(p.metric_unit({"topic": "inverter_1/generator_power", "unit": "W"}), "W")
+
+
 class SelectOptions(unittest.TestCase):
     def test_missing_value_is_added(self):
         # upstream issue #34

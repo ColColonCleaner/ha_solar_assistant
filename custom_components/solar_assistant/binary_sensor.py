@@ -1,4 +1,4 @@
-"""SolarAssistant connectivity diagnostic entity."""
+"""SolarAssistant binary sensors: the connection of the unit, the SOC spread alert, and the data of each device."""
 from __future__ import annotations
 
 from typing import Any
@@ -7,22 +7,43 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import EntityCategory
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import DOMAIN
-from .coordinator import SolarAssistantCoordinator
+from . import derived_entities
+from .coordinator import SolarAssistantConfigEntry, SolarAssistantCoordinator
 from .entity import unit_device_info
+from .health import device_prefix
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant,
+    entry: SolarAssistantConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    coordinator: SolarAssistantCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
     async_add_entities([SolarAssistantConnectionSensor(coordinator, entry)])
+    async_add_entities(derived_entities.spread_alerts(coordinator, entry))
+    known: set[str] = set()
+
+    @callback
+    def _on_new_metric(topic: str) -> None:
+        prefix = device_prefix(topic)
+        if prefix is None or prefix in known:
+            return
+        defn = coordinator.definitions.get(topic)
+        if defn is None:
+            return
+        known.add(prefix)
+        async_add_entities([derived_entities.DeviceDataSensor(coordinator, entry, prefix, defn)])
+
+    entry.async_on_unload(
+        async_dispatcher_connect(hass, coordinator.signal_new_metric, _on_new_metric)
+    )
+    for topic in list(coordinator.definitions):
+        _on_new_metric(topic)
 
 
 class SolarAssistantConnectionSensor(BinarySensorEntity):

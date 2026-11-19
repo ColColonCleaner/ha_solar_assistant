@@ -13,7 +13,14 @@ This is a fork of [Solar-Assistant/ha_solar_assistant](https://github.com/Solar-
 - **Precision**: each sensor gets a display precision from its unit and topic, such as 1 decimal for a voltage and 3 for a cell voltage or a cell imbalance.
 - **Input boxes**: each number setting is an input box with a step from its unit, made finer by the decimals of its limits and its value, so 57.4 V can be set.
 - **Time entities**: each time setting is a `time` entity, which takes any minute and shows a value that is not a quarter hour.
-- **Reliable writes**: one write at a time per unit, with `verify`, so the unit reads each value back, and two retries of a 422.
+- **Reliable writes**: one write at a time per unit, with `verify`, so the unit reads each value back, and two retries of a 422. A write that still fails raises a repair issue.
+- **Switches**: each setting with the options Enabled and Disabled is a switch.
+- **Actions**: `solar_assistant.set_setting`, `solar_assistant.start_topoff` and `solar_assistant.stop_topoff`.
+- **Diagnostics**: the download of the entry lists every topic with its definition, its options and its value, with the credentials redacted.
+- **Battery SOC spread**: the largest pack SOC minus the smallest, and an alert above a set spread.
+- **Data sensors**: one per inverter and battery, off when the device sent no changed value for a set time, because SolarAssistant repeats the last values while a cable is out.
+- **Fewer recorder writes**: an optional minimum update interval per sensor. A value that crosses zero updates at once.
+- **Discovery**: the unit shows on the Discovered card, and a known unit on a new IP gets its address updated.
 - Fixes of upstream issues #21, #28, #31, #32, #34, #35 and of the options-flow bug of PR #27.
 
 To install it through HACS, add `https://github.com/ColColonCleaner/ha_solar_assistant` as a custom repository of the category **Integration**, in place of the upstream repository.
@@ -31,7 +38,7 @@ To install it through HACS, add `https://github.com/ColColonCleaner/ha_solar_ass
 
 ## Requirements
 
-- Home Assistant 2024.11 or later
+- Home Assistant 2026.11 or later. The fork uses `entry.runtime_data`, `AddConfigEntryEntitiesCallback` and the zeroconf service info of current Home Assistant, and it was tested on 2026.11.1 only
 - A [SolarAssistant unit](https://solar-assistant.io/shop) on your LAN, or a SolarAssistant cloud account
 - SolarAssistant on the unit: 
     - **2026-06-12 or later** for core telemetry and settings
