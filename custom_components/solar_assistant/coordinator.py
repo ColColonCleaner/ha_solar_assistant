@@ -3,14 +3,17 @@ from __future__ import annotations
 
 import asyncio
 import fnmatch
+import json
 import logging
 import socket as _socket
 from datetime import datetime
 from typing import Any
 
+import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.util.dt import utcnow
 
@@ -26,7 +29,6 @@ from py_solar_assistant import (
     connect,
     get_device_metrics,
     get_device_site_id,
-    set_metric,
 )
 from .const import (
     ALWAYS_ON_SYSTEM_TOPICS,
@@ -43,6 +45,7 @@ from .const import (
     CONF_SITE_KEY,
     CONF_TOKEN,
     DEFAULT_ENABLED_GLOBS,
+    DEVICE_REST_USERNAME,
     IP_RESCAN_AFTER_S,
     IP_RESCAN_INTERVAL_S,
     MDNS_SCAN_TIMEOUT_S,
@@ -50,6 +53,9 @@ from .const import (
     RECONNECT_INITIAL_S,
     RECONNECT_MAX_S,
     SYSTEM_PREFIX,
+    WRITE_ATTEMPTS,
+    WRITE_RETRY_DELAY_S,
+    WRITE_TIMEOUT_S,
     signal_connection_state,
     signal_metric_update,
     signal_new_metric,
@@ -77,6 +83,9 @@ class SolarAssistantCoordinator:
         self._first_failure_at: datetime | None = None
         self._last_ip_scan_at: datetime | None = None
         self._last_cloud_auth_at: datetime | None = None
+        # Setting writes
+        self._write_lock = asyncio.Lock()
+        self._verify_writes = True
 
     @property
     def signal_new_metric(self) -> str:
@@ -335,34 +344,91 @@ class SolarAssistantCoordinator:
         return [TopicFilter(topic=t) for t in base]
 
     async def set_setting(self, topic: str, value: Any) -> None:
-        """Push a Settings-group value back to the SolarAssistant unit via REST."""
+        """Write a setting to the unit, one write at a time, and have the unit verify it.
+
+        Overlapping writes of one automation could undo each other, and about one
+        write in ten failed with a 422 (upstream issues #32 and #35). So each write
+        takes the lock of the entry, asks the unit to read the value back until it
+        holds (the ``verify`` field of ``POST /api/v1/metrics``), and retries a 422,
+        a 5xx or a lost connection.
+        """
+        text = str(value)
+        async with self._write_lock:
+            last_err: Exception | None = None
+            for attempt in range(1, WRITE_ATTEMPTS + 1):
+                if attempt > 1:
+                    await asyncio.sleep(WRITE_RETRY_DELAY_S * (attempt - 1))
+                try:
+                    await self._post_setting(topic, text)
+                except _WriteRetryable as err:
+                    last_err = err
+                    _LOGGER.warning(
+                        "Write %s = %s failed, attempt %s of %s: %s",
+                        topic, text, attempt, WRITE_ATTEMPTS, err,
+                    )
+                    continue
+                except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+                    last_err = err
+                    _LOGGER.warning(
+                        "Write %s = %s lost its connection, attempt %s of %s: %s",
+                        topic, text, attempt, WRITE_ATTEMPTS, err,
+                    )
+                    continue
+                # The unit confirmed the value, so the entity shows it at once
+                # instead of waiting for the next push.
+                self.data[topic] = text
+                async_dispatcher_send(self.hass, self.signal_metric_update, topic)
+                return
+        raise HomeAssistantError(
+            f"SolarAssistant did not apply {topic} = {text} after {WRITE_ATTEMPTS} attempts: {last_err}"
+        )
+
+    async def _post_setting(self, topic: str, text: str) -> None:
+        """One ``POST /api/v1/metrics``. Raises ``_WriteRetryable`` for a reply worth a retry."""
         d = self.entry.data
         method = d.get(CONF_AUTH_METHOD, AUTH_LOCAL)
-        try:
-            if method == AUTH_LOCAL:
-                await set_metric(
-                    d[CONF_HOST],
-                    topic,
-                    str(value),
-                    password=d[CONF_PASSWORD],
-                )
+        headers: dict[str, str] = {}
+        auth: aiohttp.BasicAuth | None = None
+        if method == AUTH_LOCAL:
+            url = f"http://{d[CONF_HOST]}/api/v1/metrics"
+            auth = aiohttp.BasicAuth(DEVICE_REST_USERNAME, d[CONF_PASSWORD])
+        else:
+            headers["Authorization"] = f"Bearer {d[CONF_TOKEN]}"
+            local_ip = d.get(CONF_LOCAL_IP, "")
+            if local_ip and self.connected_host == local_ip:
+                url = f"http://{local_ip}/api/v1/metrics"
             else:
-                local_ip = d.get(CONF_LOCAL_IP, "")
-                token = d[CONF_TOKEN]
-                if local_ip and self.connected_host == local_ip:
-                    await set_metric(local_ip, topic, str(value), token=token)
-                else:
-                    await set_metric(
-                        d[CONF_HOST],
-                        topic,
-                        str(value),
-                        token=token,
-                        scheme="https",
-                        site_id=int(d.get(CONF_SITE_ID, 0) or 0),
-                        site_key=d.get(CONF_SITE_KEY, ""),
-                    )
-        except SolarAssistantError as err:
-            raise HomeAssistantError(str(err)) from err
+                url = f"https://{d.get(CONF_HOST, '')}/api/v1/metrics"
+                site_id = int(d.get(CONF_SITE_ID, 0) or 0)
+                if site_id:
+                    headers["site-id"] = str(site_id)
+                if d.get(CONF_SITE_KEY):
+                    headers["site-key"] = d[CONF_SITE_KEY]
+
+        body: dict[str, Any] = {"topic": topic, "value": text}
+        if self._verify_writes:
+            body["verify"] = True
+        session = async_get_clientsession(self.hass)
+        async with session.post(
+            url,
+            json=body,
+            auth=auth,
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=WRITE_TIMEOUT_S),
+        ) as resp:
+            if resp.status == 200:
+                return
+            detail = await _error_detail(resp)
+        if self._verify_writes and resp.status in (400, 422) and "verify" in detail.lower():
+            # A unit that predates the verify field rejects it. Write without it
+            # from now on.
+            _LOGGER.info("SolarAssistant rejected the verify field (%s), writing without it", detail)
+            self._verify_writes = False
+            await self._post_setting(topic, text)
+            return
+        if resp.status == 422 or resp.status >= 500:
+            raise _WriteRetryable(f"HTTP {resp.status}: {detail}")
+        raise HomeAssistantError(f"SolarAssistant refused {topic} = {text}: HTTP {resp.status}: {detail}")
 
     async def _refresh_cloud_token(self) -> None:
         d = self.entry.data
@@ -395,6 +461,27 @@ class SolarAssistantCoordinator:
 
 class _ReauthRequired(Exception):
     """Internal: cloud token rejected, refresh needed."""
+
+
+class _WriteRetryable(Exception):
+    """Internal: the unit did not apply a write, and a retry can succeed."""
+
+
+async def _error_detail(resp: aiohttp.ClientResponse) -> str:
+    """The error text of a reply: the ``error`` field of a JSON body, else the body text."""
+    try:
+        text = (await resp.text()).strip()
+    except (aiohttp.ClientError, UnicodeDecodeError):
+        return resp.reason or ""
+    try:
+        body = json.loads(text)
+    except ValueError:
+        return text[:300]
+    if isinstance(body, dict):
+        for key in ("error", "message", "result"):
+            if body.get(key):
+                return str(body[key])
+    return text[:300]
 
 
 def _mdns_scan_for_site(zc: Any, site_id: int) -> str | None:

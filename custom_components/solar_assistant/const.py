@@ -52,6 +52,14 @@ IP_RESCAN_AFTER_S = 300          # start scanning after 5 min of continuous fail
 IP_RESCAN_INTERVAL_S = 300       # repeat mDNS scan no more often than every 5 min
 CLOUD_IP_REFRESH_INTERVAL_S = 12 * 3600  # re-authorize via cloud API at most once per 12 h
 
+# Setting writes (POST /api/v1/metrics). The unit authenticates a local client
+# as this user with its web password.
+DEVICE_REST_USERNAME = "admin"
+WRITE_ATTEMPTS = 3
+WRITE_RETRY_DELAY_S = 2
+# With verify, the unit reads the value back and writes it again until it holds.
+WRITE_TIMEOUT_S = 30
+
 MDNS_SERVICE_TYPE = "_solar-assistant._tcp.local."
 MDNS_SCAN_TIMEOUT_S = 5
 
