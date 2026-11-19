@@ -353,6 +353,14 @@ class SolarAssistantOptionsFlow(OptionsFlow):
         if user_input is not None:
             selected: list[str] = []
             for sec in form_sections.values():
+                if sec["key"] not in user_input:
+                    # A submit without this section, from a script or the API,
+                    # keeps its current selection instead of clearing it
+                    # (found in upstream PR #27).
+                    selected.extend(
+                        g for g in sec["choices"] if any(_overlaps(g, c) for c in current_globs)
+                    )
+                    continue
                 inner = user_input.get(sec["key"]) or {}
                 selected.extend(inner.get(_SECTION_FIELD, []) or [])
             selected.extend(_globs_not_offered(current_globs, form_sections))
