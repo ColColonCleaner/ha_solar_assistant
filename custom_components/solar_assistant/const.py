@@ -60,6 +60,9 @@ WRITE_RETRY_DELAY_S = 2
 # With verify, the unit reads the value back and writes it again until it holds.
 WRITE_TIMEOUT_S = 30
 
+# The unique ID of each top-off entity is "<entry unique ID>_topoff_<key>".
+TOPOFF_UNIQUE_PREFIX = "topoff_"
+
 MDNS_SERVICE_TYPE = "_solar-assistant._tcp.local."
 MDNS_SCAN_TIMEOUT_S = 5
 

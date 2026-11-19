@@ -2,14 +2,14 @@
   "domain": "solar_assistant",
   "name": "SolarAssistant",
   "after_dependencies": ["zeroconf"],
-  "codeowners": ["@Solar-Assistant"],
+  "codeowners": ["@ColColonCleaner"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/Solar-Assistant/ha_solar_assistant",
+  "documentation": "https://github.com/ColColonCleaner/ha_solar_assistant",
   "integration_type": "device",
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/Solar-Assistant/ha_solar_assistant/issues",
+  "issue_tracker": "https://github.com/ColColonCleaner/ha_solar_assistant/issues",
   "loggers": ["py_solar_assistant"],
   "requirements": ["py-solar-assistant==0.4.0"],
-  "version": "0.3.0"
+  "version": "0.3.1"
 }

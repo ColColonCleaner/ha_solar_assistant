@@ -1,3 +1,19 @@
+## v0.3.1 (fork ColColonCleaner/ha_solar_assistant)
+
+### Feat
+
+- **topoff**: battery top-off from the grid when the batteries have not been full for a set number of days, off by default
+- **number**: input boxes with a step from the unit and the decimals of the limits and the value (#21)
+- **sensor**: a suggested display precision from the unit and the topic
+- **time**: time settings as time entities, which take any minute (#28)
+
+### Fix
+
+- **sensor**: a value with its unit inside, such as "230 V", parses to its number (#31)
+- **select**: a value outside the options stays visible instead of unknown (#34)
+- **coordinator**: one write at a time, verified by the unit, with retries of a 422 (#32, #35)
+- **options**: a submit without a section keeps that section (found in PR #27)
+
 ## v0.3.0 (2026-10-30)
 
 ### Feat

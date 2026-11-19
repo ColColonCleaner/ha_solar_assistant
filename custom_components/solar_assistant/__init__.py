@@ -8,18 +8,24 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
-from .const import CONF_ENABLED_TOPICS, DOMAIN, SYSTEM_PREFIX
+from .const import CONF_ENABLED_TOPICS, DOMAIN, SYSTEM_PREFIX, TOPOFF_UNIQUE_PREFIX
 from .coordinator import SolarAssistantCoordinator
+from .topoff_manager import TopOffManager
 
-PLATFORMS = ["binary_sensor", "number", "select", "sensor", "switch", "time"]
+PLATFORMS = ["binary_sensor", "button", "number", "select", "sensor", "switch", "time"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = SolarAssistantCoordinator(hass, entry)
+    topoff = TopOffManager(hass, entry, coordinator)
+    await topoff.async_load()
+    coordinator.topoff = topoff
     await coordinator.async_start()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    topoff.async_start()
+    entry.async_on_unload(topoff.async_stop)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     return True
 
@@ -66,6 +72,9 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
             if ent.domain != "sensor" or not ent.unique_id.startswith(prefix):
                 continue
             topic = ent.unique_id[len(prefix):]
+            if topic.startswith(TOPOFF_UNIQUE_PREFIX):
+                # A sensor of the battery top-off, not a metric topic.
+                continue
             if not coordinator.should_create_sensor(topic):
                 registry.async_remove(ent.entity_id)
     await hass.config_entries.async_reload(entry.entry_id)

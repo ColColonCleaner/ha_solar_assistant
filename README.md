@@ -5,6 +5,19 @@ Official [Home Assistant](https://www.home-assistant.io) integration for [SolarA
 Connects your SolarAssistant unit to Home Assistant over the local network or through the SolarAssistant cloud. Exposes your solar system as
 native entities: live telemetry sensors plus writable settings for inverter parameters - no separate MQTT broker required.
 
+## This fork
+
+This is a fork of [Solar-Assistant/ha_solar_assistant](https://github.com/Solar-Assistant/ha_solar_assistant). It adds:
+
+- **Battery top-off**: a grid charge to full when the batteries have not been full for a set number of days. See [Battery top-off](#battery-top-off).
+- **Precision**: each sensor gets a display precision from its unit and topic, such as 1 decimal for a voltage and 3 for a cell voltage or a cell imbalance.
+- **Input boxes**: each number setting is an input box with a step from its unit, made finer by the decimals of its limits and its value, so 57.4 V can be set.
+- **Time entities**: each time setting is a `time` entity, which takes any minute and shows a value that is not a quarter hour.
+- **Reliable writes**: one write at a time per unit, with `verify`, so the unit reads each value back, and two retries of a 422.
+- Fixes of upstream issues #21, #28, #31, #32, #34, #35 and of the options-flow bug of PR #27.
+
+To install it through HACS, add `https://github.com/ColColonCleaner/ha_solar_assistant` as a custom repository of the category **Integration**, in place of the upstream repository.
+
 ## Features
 
 - **Live data**: PV power, battery state of charge, grid power, load power, voltage, current, temperature, and more, streamed in real time
@@ -97,6 +110,30 @@ Entity names and counts depend on your inverter model. A typical single-inverter
 | `select`        | Work mode slot priority, work mode start/end time, export limiter source                                     |
 | `switch`        | Work mode slot enabled                                                                                       |
 | `binary_sensor` | Connection status                                                                                            |
+
+### Battery top-off
+
+A lithium battery bank that rarely reaches full drifts: the packs show different states of charge, and the BMS balances the cells only near full. The top-off charges the bank from the grid to full when it has not been full for a set number of days.
+
+It is **off by default**. The entities sit on the device of the SolarAssistant unit:
+
+| Entity | Default | Meaning |
+| --- | --- | --- |
+| Battery top-off (switch) | off | turns the feature on |
+| Top-off interval | 7 d | days without a full charge before a top-off is due |
+| Top-off charge current | 100 A | the grid charge current during a top-off |
+| Top-off full charge | 100 % | the state of charge that every battery must report |
+| Top-off hold time | 30 min | the time to stay at full, so the BMS can balance the cells |
+| Top-off time limit | 8 h | a top-off that runs longer stops with an error |
+| Top-off window start, end | 00:00, 00:00 | a due top-off starts only in this window. Equal times mean any time |
+| Start top-off, Stop top-off (buttons) | | run or stop a top-off now |
+| Top-off state, Last full charge, Next top-off due (sensors) | | the state, with the saved settings and the last error as attributes |
+
+"Full" means that every `battery_N/state_of_charge` reports at least the full charge setting, or `total/battery_state_of_charge` when the unit reports no packs. Each full charge, from the sun or from a top-off, moves the next due time.
+
+A top-off saves the current values of `grid_charge`, `grid_charge_current`, `grid_charge_according_to`, `grid_charge_slot_1_start` and `grid_charge_slot_1_end` of `inverter_1`. It then sets slot 1 to the whole day, the current to the setting, the mode to the time option and the grid charge to enabled. After the hold, it writes the saved values back, the mode first. The saved values persist, so a restart of Home Assistant during a top-off still restores them. A notification reports each start, end and error. A failed top-off waits for the start button, or for the switch to go off and on.
+
+These are the grid-charge settings that SolarAssistant exposes for Luxpower and EG4 inverters. The EG4 12000XP manual limits the AC charge start SOC to 90 % and the AC charge current to 100 A, so the top-off uses a time slot. A unit without these settings, or without a time option, gets an error and no write.
 
 ### Topic filtering
 

@@ -83,6 +83,8 @@ class SolarAssistantCoordinator:
         self._first_failure_at: datetime | None = None
         self._last_ip_scan_at: datetime | None = None
         self._last_cloud_auth_at: datetime | None = None
+        # The battery top-off of this entry (topoff_manager.TopOffManager)
+        self.topoff: Any = None
         # Setting writes
         self._write_lock = asyncio.Lock()
         self._verify_writes = True

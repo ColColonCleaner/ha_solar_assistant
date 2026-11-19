@@ -18,6 +18,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from . import topoff_entities
 from .const import DOMAIN
 from .coordinator import SolarAssistantCoordinator
 from .entity import SolarAssistantMetricEntity
@@ -30,6 +31,7 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator: SolarAssistantCoordinator = hass.data[DOMAIN][entry.entry_id]
+    async_add_entities(topoff_entities.times(coordinator.topoff, entry))
     registry = er.async_get(hass)
     known: set[str] = set()
 
