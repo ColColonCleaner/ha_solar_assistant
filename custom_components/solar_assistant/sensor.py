@@ -12,6 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 from .coordinator import SolarAssistantCoordinator
 from .entity import SolarAssistantMetricEntity
+from .precision import is_numeric_metric, metric_unit, parse_numeric, sensor_display_precision
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -71,12 +72,15 @@ class SolarAssistantSensor(SolarAssistantMetricEntity, SensorEntity):
         defn: dict[str, Any],
     ) -> None:
         super().__init__(coordinator, entry, topic, defn)
-        self._attr_native_unit_of_measurement = (
-            defn.get("unit_of_measurement") or defn.get("unit") or None
-        )
+        self._attr_native_unit_of_measurement = metric_unit(defn)
         self._attr_device_class = defn.get("device_class")
         self._attr_state_class = defn.get("state_class")
+        self._attr_suggested_display_precision = sensor_display_precision(topic, defn)
+        self._numeric = is_numeric_metric(defn)
 
     @property
     def native_value(self) -> Any:
-        return self._coordinator.data.get(self._topic)
+        value = self._coordinator.data.get(self._topic)
+        if self._numeric:
+            return parse_numeric(value)
+        return value
