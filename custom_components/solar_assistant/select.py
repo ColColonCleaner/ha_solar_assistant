@@ -1,4 +1,4 @@
-"""SolarAssistant enum Settings entities (e.g. Battery type, Work mode, Time points)."""
+"""SolarAssistant enum Settings entities (e.g. Battery type, Work mode)."""
 from __future__ import annotations
 
 import logging
@@ -13,8 +13,14 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 from .coordinator import SolarAssistantCoordinator
 from .entity import SolarAssistantMetricEntity
+from .precision import is_time_metric, select_options
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _is_for_us(defn: dict[str, Any] | None) -> bool:
+    """A select metric, except a time of day, which the time platform owns."""
+    return defn is not None and defn.get("platform") == "select" and not is_time_metric(defn)
 
 
 async def async_setup_entry(
@@ -28,7 +34,7 @@ async def async_setup_entry(
         if topic in known:
             return
         defn = coordinator.definitions.get(topic)
-        if defn is None or defn.get("platform") != "select":
+        if not _is_for_us(defn):
             return
         known.add(topic)
         async_add_entities([SolarAssistantSelect(coordinator, entry, topic, defn)])
@@ -38,7 +44,7 @@ async def async_setup_entry(
     )
 
     for topic, defn in list(coordinator.definitions.items()):
-        if defn.get("platform") != "select":
+        if not _is_for_us(defn):
             continue
         if topic not in known:
             known.add(topic)
@@ -54,7 +60,11 @@ class SolarAssistantSelect(SolarAssistantMetricEntity, SelectEntity):
         defn: dict[str, Any],
     ) -> None:
         super().__init__(coordinator, entry, topic, defn)
-        self._attr_options = list(defn.get("options") or [])
+        self._defn = defn
+
+    @property
+    def options(self) -> list[str]:
+        return select_options(self._defn, self._coordinator.data.get(self._topic))
 
     @property
     def current_option(self) -> str | None:

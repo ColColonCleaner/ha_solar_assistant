@@ -11,7 +11,7 @@ from homeassistant.helpers import entity_registry as er
 from .const import CONF_ENABLED_TOPICS, DOMAIN, SYSTEM_PREFIX
 from .coordinator import SolarAssistantCoordinator
 
-PLATFORMS = ["binary_sensor", "number", "select", "sensor", "switch"]
+PLATFORMS = ["binary_sensor", "number", "select", "sensor", "switch", "time"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
