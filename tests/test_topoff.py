@@ -116,6 +116,12 @@ class Decide(unittest.TestCase):
         s = status(last_full=NOW - timedelta(days=7, minutes=1))
         self.assertEqual(t.decide(s, settings(), NOW, False), (t.STATE_CHARGING, t.ACTION_START))
 
+    def test_default_window_is_the_night(self):
+        s = status(last_full=NOW - timedelta(days=8))
+        noon = NOW.replace(hour=12)
+        self.assertEqual(t.decide(s, settings(), noon, False), (t.STATE_WAITING, t.ACTION_NONE))
+        self.assertEqual(t.decide(s, settings(), NOW, False), (t.STATE_CHARGING, t.ACTION_START))
+
     def test_due_outside_the_window_waits(self):
         s = status(last_full=NOW - timedelta(days=8))
         cfg = settings(window_start=time(1, 0), window_end=time(5, 0))

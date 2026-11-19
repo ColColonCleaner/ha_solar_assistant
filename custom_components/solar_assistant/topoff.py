@@ -62,8 +62,10 @@ class Settings:
     full_soc: float = 100.0
     hold_minutes: float = 30.0
     time_limit_hours: float = 8.0
-    window_start: time = time(0, 0)
-    window_end: time = time(0, 0)
+    # A due top-off waits for the night, so it does not grid-charge while the
+    # sun could charge.
+    window_start: time = time(22, 0)
+    window_end: time = time(6, 0)
 
 
 @dataclass

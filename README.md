@@ -125,7 +125,7 @@ It is **off by default**. The entities sit on the device of the SolarAssistant u
 | Top-off full charge | 100 % | the state of charge that every battery must report |
 | Top-off hold time | 30 min | the time to stay at full, so the BMS can balance the cells |
 | Top-off time limit | 8 h | a top-off that runs longer stops with an error |
-| Top-off window start, end | 00:00, 00:00 | a due top-off starts only in this window. Equal times mean any time |
+| Top-off window start, end | 22:00, 06:00 | a due top-off starts only in this window, so it does not grid-charge while the sun could charge. Equal times mean any time |
 | Start top-off, Stop top-off (buttons) | | run or stop a top-off now |
 | Top-off state, Last full charge, Next top-off due (sensors) | | the state, with the saved settings and the last error as attributes |
 
