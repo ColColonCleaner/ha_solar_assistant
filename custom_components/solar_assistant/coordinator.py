@@ -14,6 +14,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later
@@ -55,6 +57,7 @@ from .const import (
     DEVICE_REST_USERNAME,
     IP_RESCAN_AFTER_S,
     IP_RESCAN_INTERVAL_S,
+    PRUNE_DELAY_S,
     MDNS_SCAN_TIMEOUT_S,
     MDNS_SERVICE_TYPE,
     RECONNECT_INITIAL_S,
@@ -98,6 +101,7 @@ class SolarAssistantCoordinator:
         self._pending: set[str] = set()
         self._flush_unsub: Any = None
         self.last_change: dict[str, datetime] = {}
+        self._prune_scheduled = False
         # Setting writes
         self._write_lock = asyncio.Lock()
         self._verify_writes = True
@@ -246,6 +250,27 @@ class SolarAssistantCoordinator:
             async_dispatcher_send(self.hass, self.signal_new_metric, topic)
         for topic in updated:
             async_dispatcher_send(self.hass, self.signal_metric_update, topic)
+        if not self._prune_scheduled:
+            # The entities of the discovery register within moments. A minute
+            # later, a device of this entry with no entity is left over.
+            self._prune_scheduled = True
+            self.entry.async_on_unload(async_call_later(self.hass, PRUNE_DELAY_S, self._prune_devices))
+
+    @callback
+    def _prune_devices(self, _now: Any) -> None:
+        """Remove each device of this entry that holds no entity.
+
+        Such a device is the Totals device after its sensors moved to the
+        inverter, or a phantom device of a restart (upstream issue #19). HA
+        deletes a device once no config entry uses it.
+        """
+        dev_reg = dr.async_get(self.hass)
+        ent_reg = er.async_get(self.hass)
+        for device in dr.async_entries_for_config_entry(dev_reg, self.entry.entry_id):
+            if er.async_entries_for_device(ent_reg, device.id, include_disabled_entities=True):
+                continue
+            _LOGGER.info("Removing the device %s, which holds no entity", device.name_by_user or device.name)
+            dev_reg.async_update_device(device.id, remove_config_entry_id=self.entry.entry_id)
 
     async def _fetch_discovery(self) -> list[DeviceMetric]:
         d = self.entry.data

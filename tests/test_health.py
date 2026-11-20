@@ -100,6 +100,23 @@ class Owner(unittest.TestCase):
                          ({"device": "batteries", "number": 1}, "battery_2"))
 
 
+class MergedName(unittest.TestCase):
+    DEFS = {
+        "inverter_1/pv_power": {"name": "PV power"},
+        "inverter_1/temperature": {"name": "Temperature"},
+        "total/pv_power": {"name": "PV power"},
+        "total/battery_temperature": {"name": "Battery temperature"},
+    }
+
+    def test_a_unique_name_stays(self):
+        self.assertEqual(h.merged_name("Battery temperature", "inverter_1", self.DEFS), "Battery temperature")
+        self.assertEqual(h.merged_name("AC output frequency", "inverter_1", self.DEFS), "AC output frequency")
+
+    def test_a_name_of_the_inverter_gets_the_prefix(self):
+        self.assertEqual(h.merged_name("PV power", "inverter_1", self.DEFS), "Total PV power")
+        self.assertEqual(h.merged_name("pv POWER", "inverter_1", self.DEFS), "Total pv POWER")
+
+
 class Details(unittest.TestCase):
     DEFS = {
         "inverter_1/serial_number": {"group": "Info", "name": "Serial number"},

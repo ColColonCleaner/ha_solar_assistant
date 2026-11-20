@@ -11,7 +11,7 @@ from homeassistant.helpers.entity import DeviceInfo, Entity, EntityCategory
 
 from .const import DOMAIN
 from .coordinator import SolarAssistantCoordinator
-from .health import device_details, device_owner
+from .health import device_details, device_owner, merged_name
 
 
 def unit_device_info(entry: ConfigEntry, sw_version: str | None = None) -> DeviceInfo:
@@ -89,9 +89,7 @@ class SolarAssistantMetricEntity(Entity):
             # On a unit with one inverter the totals join the inverter device.
             owner, prefix = device_owner(defn, coordinator.definitions)
             if owner.get("device") != defn.get("device") and self._attr_name:
-                # A total on the inverter device would share its name with the
-                # inverter metric, such as "PV power", so it reads "Total PV power".
-                self._attr_name = f"Total {self._attr_name}"
+                self._attr_name = merged_name(self._attr_name, prefix, coordinator.definitions)
             device_label, device_id = device_label_and_id(owner)
             self._attr_device_info = DeviceInfo(
                 identifiers={(DOMAIN, f"{scope}_{device_id}")},

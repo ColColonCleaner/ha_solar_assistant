@@ -1,3 +1,10 @@
+## v0.5.1 (fork ColColonCleaner/ha_solar_assistant)
+
+### Fix
+
+- **devices**: a minute after the first discovery, each device of the entry that holds no entity is removed, such as the Totals device after its sensors moved to the inverter (#19)
+- **devices**: a total on the inverter device keeps its own name, such as "Battery temperature". Only a name that an inverter metric already has, such as "PV power", reads "Total PV power"
+
 ## v0.5.0 (fork ColColonCleaner/ha_solar_assistant)
 
 ### Feat

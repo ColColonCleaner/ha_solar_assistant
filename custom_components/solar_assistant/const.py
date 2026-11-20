@@ -83,6 +83,9 @@ ATTR_CONFIG_ENTRY_ID = "config_entry_id"
 ATTR_TOPIC = "topic"
 ATTR_VALUE = "value"
 
+# Seconds after the first REST discovery before a device with no entity is removed
+PRUNE_DELAY_S = 60
+
 MDNS_SERVICE_TYPE = "_solar-assistant._tcp.local."
 MDNS_SCAN_TIMEOUT_S = 5
 

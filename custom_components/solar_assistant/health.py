@@ -105,6 +105,21 @@ def device_owner(defn: dict[str, Any], definitions: dict[str, dict[str, Any]]) -
     return {"device": sample.get("device"), "number": sample.get("number")}, inverters[0]
 
 
+def merged_name(name: str, owner_prefix: str, definitions: dict[str, dict[str, Any]]) -> str:
+    """The name of a total on the inverter device.
+
+    It keeps its own name, such as "Battery temperature". Only a name that an
+    inverter metric already has, such as "PV power", reads "Total PV power",
+    so no two sensors of the device share a name.
+    """
+    taken = {
+        str(d.get("name") or "").casefold()
+        for t, d in definitions.items()
+        if t.startswith(owner_prefix + "/")
+    }
+    return f"Total {name}" if name.casefold() in taken else name
+
+
 _DETAIL_WORDS = (
     ("serial_number", ("serial",)),
     ("model", ("model", "type")),
