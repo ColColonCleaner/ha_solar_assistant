@@ -227,6 +227,8 @@ class SolarAssistantCoordinator:
         except Exception as err:
             _LOGGER.debug("REST discovery skipped: %s", err)
             return
+        new_topics: list[str] = []
+        updated: list[str] = []
         for m in metrics:
             if m.group == "Ignore":
                 continue
@@ -235,9 +237,15 @@ class SolarAssistantCoordinator:
             self.definitions[topic] = _defn_for(m)
             self.data[topic] = m.value
             if is_new:
-                async_dispatcher_send(self.hass, self.signal_new_metric, topic)
+                new_topics.append(topic)
             elif self.definitions[topic].get("platform") in ("number", "select", "switch"):
-                async_dispatcher_send(self.hass, self.signal_metric_update, topic)
+                updated.append(topic)
+        # Every definition is stored before the first announcement, so a new
+        # entity sees the whole unit, such as how many inverters it has.
+        for topic in new_topics:
+            async_dispatcher_send(self.hass, self.signal_new_metric, topic)
+        for topic in updated:
+            async_dispatcher_send(self.hass, self.signal_metric_update, topic)
 
     async def _fetch_discovery(self) -> list[DeviceMetric]:
         d = self.entry.data

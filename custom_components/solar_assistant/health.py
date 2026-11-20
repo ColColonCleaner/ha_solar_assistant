@@ -81,6 +81,30 @@ def soc_spread(socs: dict[str, float]) -> float | None:
     return max(socs.values()) - min(socs.values())
 
 
+_INVERTER_PREFIX = re.compile(r"^inverter_\d+$")
+
+
+def device_owner(defn: dict[str, Any], definitions: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], str]:
+    """The device that a metric belongs to, as a device/number pair, and the topic prefix of that device.
+
+    A unit with one inverter puts its totals on the inverter device, because they
+    repeat the inverter and add the battery and energy totals. With two or more
+    inverters, or before any inverter metric is known, the totals keep a device
+    of their own.
+    """
+    owner = {"device": defn.get("device"), "number": defn.get("number")}
+    prefix = str(defn.get("topic") or "").split("/", 1)[0]
+    if defn.get("device") != "totals":
+        return owner, prefix
+    inverters = sorted({
+        t.split("/", 1)[0] for t in definitions if _INVERTER_PREFIX.match(t.split("/", 1)[0])
+    })
+    if len(inverters) != 1:
+        return owner, prefix
+    sample = next(d for t, d in sorted(definitions.items()) if t.startswith(inverters[0] + "/"))
+    return {"device": sample.get("device"), "number": sample.get("number")}, inverters[0]
+
+
 _DETAIL_WORDS = (
     ("serial_number", ("serial",)),
     ("model", ("model", "type")),

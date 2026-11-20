@@ -29,7 +29,7 @@ from .const import (
 )
 from .coordinator import SolarAssistantConfigEntry, SolarAssistantCoordinator
 from .entity import device_label_and_id
-from .health import device_prefix, is_stale, pack_socs, soc_spread
+from .health import device_owner, device_prefix, is_stale, pack_socs, soc_spread
 
 STALE_CHECK = timedelta(seconds=30)
 
@@ -43,7 +43,8 @@ class _DerivedEntity(Entity):
         self._coordinator = coordinator
         self._entry = entry
         self._attr_unique_id = f"{entry.unique_id}_{unique}"
-        label, device_id = device_label_and_id(device)
+        owner, _prefix = device_owner(device, coordinator.definitions)
+        label, device_id = device_label_and_id(owner)
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{entry.unique_id}_{device_id}")},
             name=label,
@@ -165,6 +166,32 @@ class DeviceDataSensor(_DerivedEntity, BinarySensorEntity):
             "last_change": last.isoformat() if last else None,
             "stale_after_min": self._coordinator.stale_after,
         }
+
+
+@callback
+def add_with_first_pack(hass, entry: SolarAssistantConfigEntry, coordinator: SolarAssistantCoordinator,
+                        async_add_entities, factory) -> None:
+    """Add the entities of `factory` once the unit reports a pack SOC.
+
+    At platform setup the discovery may not have run, and the device of the
+    spread depends on how many inverters the unit has.
+    """
+    added = False
+
+    @callback
+    def _check(_topic: str | None = None) -> None:
+        nonlocal added
+        if added or not pack_topics(coordinator.definitions):
+            return
+        added = True
+        async_add_entities(factory(coordinator, entry))
+
+    entry.async_on_unload(async_dispatcher_connect(hass, coordinator.signal_new_metric, _check))
+    _check()
+
+
+def pack_topics(definitions: dict[str, Any]) -> list[str]:
+    return [t for t in definitions if t.startswith("battery_") and t.endswith("/state_of_charge")]
 
 
 @callback

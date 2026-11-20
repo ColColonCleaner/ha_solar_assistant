@@ -25,7 +25,9 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data
     async_add_entities([SolarAssistantConnectionSensor(coordinator, entry)])
-    async_add_entities(derived_entities.spread_alerts(coordinator, entry))
+    derived_entities.add_with_first_pack(
+        hass, entry, coordinator, async_add_entities, derived_entities.spread_alerts
+    )
     known: set[str] = set()
 
     @callback

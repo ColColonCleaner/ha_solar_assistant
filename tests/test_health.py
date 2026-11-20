@@ -77,6 +77,29 @@ class Spread(unittest.TestCase):
         self.assertEqual(h.pack_socs({"battery_1/state_of_charge": "n/a"}), {})
 
 
+class Owner(unittest.TestCase):
+    INV = {"topic": "inverter_1/pv_power", "device": "inverters", "number": 0}
+    TOT = {"topic": "total/pv_power", "device": "totals", "number": None}
+
+    def test_one_inverter_takes_the_totals(self):
+        defs = {"inverter_1/pv_power": self.INV, "total/pv_power": self.TOT}
+        self.assertEqual(h.device_owner(self.TOT, defs), ({"device": "inverters", "number": 0}, "inverter_1"))
+
+    def test_two_inverters_keep_the_totals_apart(self):
+        defs = {"inverter_1/pv_power": self.INV, "inverter_2/pv_power": dict(self.INV, number=1),
+                "total/pv_power": self.TOT}
+        self.assertEqual(h.device_owner(self.TOT, defs), ({"device": "totals", "number": None}, "total"))
+
+    def test_no_inverter_yet_keeps_the_totals_apart(self):
+        self.assertEqual(h.device_owner(self.TOT, {"total/pv_power": self.TOT}),
+                         ({"device": "totals", "number": None}, "total"))
+
+    def test_other_devices_keep_their_own(self):
+        bat = {"topic": "battery_2/voltage", "device": "batteries", "number": 1}
+        self.assertEqual(h.device_owner(bat, {"inverter_1/pv_power": self.INV}),
+                         ({"device": "batteries", "number": 1}, "battery_2"))
+
+
 class Details(unittest.TestCase):
     DEFS = {
         "inverter_1/serial_number": {"group": "Info", "name": "Serial number"},

@@ -6,6 +6,7 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.typing import ConfigType
 
@@ -38,6 +39,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: SolarAssistantConfigEntr
     entry.async_on_unload(topoff.async_stop)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     return True
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: SolarAssistantConfigEntry, device_entry: dr.DeviceEntry
+) -> bool:
+    """Let the UI delete a device that holds no entity of this entry.
+
+    Such a device is left over: the totals device after its sensors moved to
+    the inverter, or a phantom device of a restart (upstream issue #19).
+    """
+    registry = er.async_get(hass)
+    return not er.async_entries_for_device(registry, device_entry.id, include_disabled_entities=True)
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: SolarAssistantConfigEntry) -> bool:

@@ -2,6 +2,10 @@
 
 ### Feat
 
+- **devices**: on a unit with one inverter, the totals sensors and the SOC spread join the inverter device, named "Total ...". With two or more inverters they keep the Totals device. Entity IDs stay
+- **devices**: a device with no entity of the entry can be deleted in the UI, such as the emptied Totals device or a phantom device of a restart (#19)
+- **coordinator**: the REST discovery stores every definition before it announces the new topics, so each entity sees the whole unit
+
 - **topoff**: a due top-off starts after the battery has discharged for a set time without a break, 60 min by default, instead of in a time window. The grid then fills only the rest above the daily peak of the SOC. The number "Top-off after discharge" sets the time, the state attribute `discharging_since` shows the count, and the window entities leave the registry
 
 ## v0.4.2 (fork ColColonCleaner/ha_solar_assistant)

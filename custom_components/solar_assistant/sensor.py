@@ -38,7 +38,9 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data
     async_add_entities(topoff_entities.sensors(coordinator.topoff, entry))
-    async_add_entities(derived_entities.spread_sensors(coordinator, entry))
+    derived_entities.add_with_first_pack(
+        hass, entry, coordinator, async_add_entities, derived_entities.spread_sensors
+    )
     known: set[str] = set()
 
     @callback

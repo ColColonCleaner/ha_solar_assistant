@@ -11,7 +11,7 @@ from homeassistant.helpers.entity import DeviceInfo, Entity, EntityCategory
 
 from .const import DOMAIN
 from .coordinator import SolarAssistantCoordinator
-from .health import device_details
+from .health import device_details, device_owner
 
 
 def unit_device_info(entry: ConfigEntry, sw_version: str | None = None) -> DeviceInfo:
@@ -86,7 +86,13 @@ class SolarAssistantMetricEntity(Entity):
                 entry, sw_version=sw if isinstance(sw, str) else None
             )
         else:
-            device_label, device_id = device_label_and_id(defn)
+            # On a unit with one inverter the totals join the inverter device.
+            owner, prefix = device_owner(defn, coordinator.definitions)
+            if owner.get("device") != defn.get("device") and self._attr_name:
+                # A total on the inverter device would share its name with the
+                # inverter metric, such as "PV power", so it reads "Total PV power".
+                self._attr_name = f"Total {self._attr_name}"
+            device_label, device_id = device_label_and_id(owner)
             self._attr_device_info = DeviceInfo(
                 identifiers={(DOMAIN, f"{scope}_{device_id}")},
                 name=device_label,
@@ -94,7 +100,7 @@ class SolarAssistantMetricEntity(Entity):
             )
             # Model, serial number and firmware from the Info metrics of the
             # device, when the unit reports them (upstream issue #11).
-            details = device_details(coordinator.definitions, coordinator.data, topic.split("/", 1)[0])
+            details = device_details(coordinator.definitions, coordinator.data, prefix)
             for key, value in details.items():
                 self._attr_device_info[key] = value
 
