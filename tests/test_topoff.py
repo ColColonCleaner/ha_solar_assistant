@@ -9,7 +9,7 @@ import pathlib
 import sys
 import types
 import unittest
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 
 _DIR = pathlib.Path(__file__).resolve().parents[1] / "custom_components" / "solar_assistant"
 # A bare package object, so the relative imports resolve without __init__.py,
@@ -49,18 +49,29 @@ class Socs(unittest.TestCase):
         self.assertFalse(t.is_full([], 100))
 
 
-class Window(unittest.TestCase):
-    def test_equal_ends_mean_all_day(self):
-        self.assertTrue(t.in_window(time(13, 0), time(0, 0), time(0, 0)))
+class Discharge(unittest.TestCase):
+    def test_battery_power_prefers_the_power(self):
+        self.assertEqual(t.battery_power({"total/battery_power": "-1105.5", "total/battery_current": "-20"}), -1105.5)
+        self.assertEqual(t.battery_power({"total/battery_current": "-20.5"}), -20.5)
+        self.assertIsNone(t.battery_power({}))
 
-    def test_plain_window(self):
-        self.assertTrue(t.in_window(time(2, 0), time(1, 0), time(5, 0)))
-        self.assertFalse(t.in_window(time(5, 0), time(1, 0), time(5, 0)))
+    def test_a_discharge_starts_and_keeps_its_start(self):
+        start = t.update_discharging(None, NOW, -500.0)
+        self.assertEqual(start, NOW)
+        self.assertEqual(t.update_discharging(start, NOW + timedelta(minutes=30), -20.0), NOW)
 
-    def test_window_over_midnight(self):
-        self.assertTrue(t.in_window(time(23, 0), time(22, 0), time(6, 0)))
-        self.assertTrue(t.in_window(time(3, 0), time(22, 0), time(6, 0)))
-        self.assertFalse(t.in_window(time(12, 0), time(22, 0), time(6, 0)))
+    def test_zero_or_a_charge_ends_it(self):
+        self.assertIsNone(t.update_discharging(NOW, NOW + timedelta(minutes=5), 0.0))
+        self.assertIsNone(t.update_discharging(NOW, NOW + timedelta(minutes=5), 350.0))
+
+    def test_no_reading_keeps_the_last_answer(self):
+        self.assertEqual(t.update_discharging(NOW, NOW + timedelta(minutes=5), None), NOW)
+        self.assertIsNone(t.update_discharging(None, NOW, None))
+
+    def test_discharged_for(self):
+        self.assertTrue(t.discharged_for(NOW - timedelta(minutes=60), NOW, 60))
+        self.assertFalse(t.discharged_for(NOW - timedelta(minutes=59), NOW, 60))
+        self.assertFalse(t.discharged_for(None, NOW, 60))
 
 
 class Options(unittest.TestCase):
@@ -112,20 +123,19 @@ class Decide(unittest.TestCase):
     def test_no_last_full_is_not_due(self):
         self.assertEqual(t.decide(status(), settings(), NOW, False), (t.STATE_IDLE, t.ACTION_NONE))
 
-    def test_due_starts(self):
-        s = status(last_full=NOW - timedelta(days=7, minutes=1))
+    def test_due_starts_after_an_hour_of_discharge(self):
+        s = status(last_full=NOW - timedelta(days=7, minutes=1), discharging_since=NOW - timedelta(minutes=60))
         self.assertEqual(t.decide(s, settings(), NOW, False), (t.STATE_CHARGING, t.ACTION_START))
 
-    def test_default_window_is_the_night(self):
-        s = status(last_full=NOW - timedelta(days=8))
-        noon = NOW.replace(hour=12)
-        self.assertEqual(t.decide(s, settings(), noon, False), (t.STATE_WAITING, t.ACTION_NONE))
-        self.assertEqual(t.decide(s, settings(), NOW, False), (t.STATE_CHARGING, t.ACTION_START))
+    def test_due_waits_for_the_discharge(self):
+        s = status(last_full=NOW - timedelta(days=8), discharging_since=NOW - timedelta(minutes=59))
+        self.assertEqual(t.decide(s, settings(), NOW, False), (t.STATE_WAITING, t.ACTION_NONE))
+        s.discharging_since = None
+        self.assertEqual(t.decide(s, settings(), NOW, False), (t.STATE_WAITING, t.ACTION_NONE))
 
-    def test_due_outside_the_window_waits(self):
-        s = status(last_full=NOW - timedelta(days=8))
-        cfg = settings(window_start=time(1, 0), window_end=time(5, 0))
-        self.assertEqual(t.decide(s, cfg, NOW, False), (t.STATE_WAITING, t.ACTION_NONE))
+    def test_the_discharge_time_is_a_setting(self):
+        s = status(last_full=NOW - timedelta(days=8), discharging_since=NOW - timedelta(minutes=30))
+        self.assertEqual(t.decide(s, settings(discharge_minutes=30), NOW, False), (t.STATE_CHARGING, t.ACTION_START))
 
     def test_start_now(self):
         self.assertEqual(t.decide(status(), settings(), NOW, False, start_now=True), (t.STATE_CHARGING, t.ACTION_START))

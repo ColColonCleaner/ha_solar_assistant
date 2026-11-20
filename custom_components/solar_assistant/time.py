@@ -19,7 +19,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import topoff_entities
-from .const import DOMAIN
+from .const import DOMAIN, TOPOFF_UNIQUE_PREFIX
 from .coordinator import SolarAssistantConfigEntry, SolarAssistantCoordinator
 from .entity import SolarAssistantMetricEntity
 from .precision import format_hhmm, is_time_metric, parse_hhmm
@@ -33,8 +33,12 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data
-    async_add_entities(topoff_entities.times(coordinator.topoff, entry))
     registry = er.async_get(hass)
+    for key in topoff_entities.RETIRED_TIMES:
+        old = registry.async_get_entity_id("time", DOMAIN, f"{entry.unique_id}_{TOPOFF_UNIQUE_PREFIX}{key}")
+        if old is not None:
+            # The window of the top-off of 0.4 gave way to the discharge time.
+            registry.async_remove(old)
     known: set[str] = set()
 
     @callback

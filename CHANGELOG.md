@@ -1,3 +1,9 @@
+## v0.5.0 (fork ColColonCleaner/ha_solar_assistant)
+
+### Feat
+
+- **topoff**: a due top-off starts after the battery has discharged for a set time without a break, 60 min by default, instead of in a time window. The grid then fills only the rest above the daily peak of the SOC. The number "Top-off after discharge" sets the time, the state attribute `discharging_since` shows the count, and the window entities leave the registry
+
 ## v0.4.2 (fork ColColonCleaner/ha_solar_assistant)
 
 ### Fix

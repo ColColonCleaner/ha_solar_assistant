@@ -131,7 +131,8 @@
       "topoff_current_a": {"name": "Top-off charge current"},
       "topoff_full_soc": {"name": "Top-off full charge"},
       "topoff_hold_minutes": {"name": "Top-off hold time"},
-      "topoff_time_limit_hours": {"name": "Top-off time limit"}
+      "topoff_time_limit_hours": {"name": "Top-off time limit"},
+      "topoff_discharge_minutes": {"name": "Top-off after discharge"}
     },
     "sensor": {
       "soc_spread": {"name": "Battery SOC spread"},
@@ -140,7 +141,7 @@
         "state": {
           "disabled": "Disabled",
           "idle": "Idle",
-          "waiting": "Waiting for the window",
+          "waiting": "Waiting for the discharge",
           "charging": "Charging",
           "holding": "Holding at full",
           "error": "Error"
@@ -151,10 +152,6 @@
     },
     "switch": {
       "topoff_enabled": {"name": "Battery top-off"}
-    },
-    "time": {
-      "topoff_window_start": {"name": "Top-off window start"},
-      "topoff_window_end": {"name": "Top-off window end"}
     }
   },
   "exceptions": {
@@ -186,7 +183,7 @@
     },
     "start_topoff": {
       "name": "Start top-off",
-      "description": "Starts a battery top-off now, outside the window. The switch Battery top-off must be on.",
+      "description": "Starts a battery top-off now, without the wait for the discharge. The switch Battery top-off must be on.",
       "fields": {
         "config_entry_id": {"name": "SolarAssistant unit", "description": "The SolarAssistant entry."}
       }

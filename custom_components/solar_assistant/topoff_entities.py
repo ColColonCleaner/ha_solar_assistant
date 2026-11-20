@@ -5,14 +5,13 @@ edits every setting of the top-off.
 """
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.components.time import TimeEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
@@ -30,11 +29,10 @@ NUMBERS: tuple[tuple[str, str, str, NumberDeviceClass | None, float, float, floa
     ("full_soc", "Top-off full charge", "%", None, 50, 100, 1),
     ("hold_minutes", "Top-off hold time", "min", NumberDeviceClass.DURATION, 0, 480, 1),
     ("time_limit_hours", "Top-off time limit", "h", NumberDeviceClass.DURATION, 0.5, 48, 0.5),
+    ("discharge_minutes", "Top-off after discharge", "min", NumberDeviceClass.DURATION, 5, 600, 5),
 )
-TIMES: tuple[tuple[str, str], ...] = (
-    ("window_start", "Top-off window start"),
-    ("window_end", "Top-off window end"),
-)
+# The time entities of the window of 0.4, which the integration removes from the registry.
+RETIRED_TIMES = ("window_start", "window_end")
 
 
 class TopOffEntity(Entity):
@@ -98,21 +96,6 @@ class TopOffNumber(TopOffEntity, NumberEntity):
         await self._manager.async_set(**{self._key: value})
 
 
-class TopOffTime(TopOffEntity, TimeEntity):
-    _attr_entity_category = EntityCategory.CONFIG
-
-    def __init__(self, manager: TopOffManager, entry: ConfigEntry, key: str, name: str) -> None:
-        super().__init__(manager, entry, key, name)
-        self._key = key
-
-    @property
-    def native_value(self) -> time:
-        return getattr(self._manager.settings, self._key)
-
-    async def async_set_value(self, value: time) -> None:
-        await self._manager.async_set(**{self._key: value.replace(second=0, microsecond=0)})
-
-
 class TopOffStateSensor(TopOffEntity, SensorEntity):
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = list(t.STATES)
@@ -133,6 +116,7 @@ class TopOffStateSensor(TopOffEntity, SensorEntity):
             "inverter": s.inverter,
             "started_at": s.started_at.isoformat() if s.started_at else None,
             "full_since": s.full_since.isoformat() if s.full_since else None,
+            "discharging_since": s.discharging_since.isoformat() if s.discharging_since else None,
             "saved_settings": s.saved,
             "last_error": s.last_error,
             "last_result": s.last_result,
@@ -180,10 +164,6 @@ def numbers(manager: TopOffManager, entry: ConfigEntry) -> list[Entity]:
 
 
 @callback
-def times(manager: TopOffManager, entry: ConfigEntry) -> list[Entity]:
-    return [TopOffTime(manager, entry, key, name) for key, name in TIMES]
-
-
 @callback
 def sensors(manager: TopOffManager, entry: ConfigEntry) -> list[Entity]:
     return [

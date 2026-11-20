@@ -1,6 +1,8 @@
 """Battery top-off from the grid: the decisions, with no Home Assistant imports.
 
 When the batteries have not been full for a set number of days, the top-off
+waits until the battery has discharged for a set time without a break, which
+places the start near the daily peak of the SOC after the sun. Then it
 switches the grid charge of the inverter to a whole-day time slot at a set
 current, waits until every battery reports full, holds there for a set time so
 the BMS can balance the cells, and then writes back the settings it changed.
@@ -14,7 +16,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from .precision import parse_numeric
@@ -50,6 +52,8 @@ ACTION_RESTORE = "restore"
 
 _PACK_SOC = re.compile(r"^battery_\d+/state_of_charge$")
 TOTAL_SOC = "total/battery_state_of_charge"
+TOTAL_BATTERY_POWER = "total/battery_power"
+TOTAL_BATTERY_CURRENT = "total/battery_current"
 
 
 @dataclass
@@ -62,10 +66,10 @@ class Settings:
     full_soc: float = 100.0
     hold_minutes: float = 30.0
     time_limit_hours: float = 8.0
-    # A due top-off waits for the night, so it does not grid-charge while the
-    # sun could charge.
-    window_start: time = time(22, 0)
-    window_end: time = time(6, 0)
+    # A due top-off waits until the battery has discharged this long without a
+    # break. Then the sun has passed its useful production of the day, and the
+    # SOC is near its daily peak, so the grid fills only the rest.
+    discharge_minutes: float = 60.0
 
 
 @dataclass
@@ -80,6 +84,35 @@ class Status:
     inverter: str = "inverter_1"
     last_error: str | None = None
     last_result: str | None = None
+    # Since when the battery power has been negative without a break, or None.
+    discharging_since: datetime | None = None
+
+
+def battery_power(data: dict[str, Any]) -> float | None:
+    """The power of the battery bank in W, negative while it discharges, or its current when no power reports."""
+    for topic in (TOTAL_BATTERY_POWER, TOTAL_BATTERY_CURRENT):
+        value = parse_numeric(data.get(topic))
+        if value is not None:
+            return float(value)
+    return None
+
+
+def update_discharging(since: datetime | None, now: datetime, power: float | None) -> datetime | None:
+    """The start of the running discharge: kept while the power stays negative, None at 0 or above.
+
+    No reading keeps the last answer, so a gap in the data neither starts nor
+    breaks a discharge.
+    """
+    if power is None:
+        return since
+    if power < 0:
+        return since or now
+    return None
+
+
+def discharged_for(since: datetime | None, now: datetime, minutes: float) -> bool:
+    """Whether the battery has discharged without a break for at least `minutes`."""
+    return since is not None and now - since >= timedelta(minutes=minutes)
 
 
 def battery_socs(data: dict[str, Any]) -> list[float | None]:
@@ -94,15 +127,6 @@ def battery_socs(data: dict[str, Any]) -> list[float | None]:
 def is_full(socs: list[float | None], threshold: float) -> bool:
     """Whether every pack reports at least the threshold. A missing value is not full."""
     return bool(socs) and all(s is not None and s >= threshold for s in socs)
-
-
-def in_window(now: time, start: time, end: time) -> bool:
-    """Whether ``now`` is in the window. Equal ends mean the whole day. A window can wrap midnight."""
-    if start == end:
-        return True
-    if start < end:
-        return start <= now < end
-    return now >= start or now < end
 
 
 def due_at(last_full: datetime | None, interval_days: float) -> datetime | None:
@@ -168,8 +192,8 @@ def decide(
 ) -> tuple[str, str]:
     """The next state and the action for the manager to take.
 
-    ``now`` is local time, because the window is a time of day. The manager
-    records a full charge before it calls this.
+    The manager records a full charge and the start of the running discharge
+    in ``status`` before it calls this.
     """
     active = status.state in ACTIVE_STATES
     if active and (stop_now or not settings.enabled):
@@ -202,6 +226,6 @@ def decide(
     due = due_at(status.last_full, settings.interval_days)
     if due is None or now < due or full:
         return STATE_IDLE, ACTION_NONE
-    if not in_window(now.time(), settings.window_start, settings.window_end):
+    if not discharged_for(status.discharging_since, now, settings.discharge_minutes):
         return STATE_WAITING, ACTION_NONE
     return STATE_CHARGING, ACTION_START

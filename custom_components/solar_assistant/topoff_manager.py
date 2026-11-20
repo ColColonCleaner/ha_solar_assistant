@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import asdict, fields
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.components import persistent_notification
@@ -32,8 +32,8 @@ _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 1
 TICK = timedelta(seconds=60)
 SAVE_DELAY_S = 10
-_TIME_FIELDS = ("window_start", "window_end")
-_DATETIME_FIELDS = ("last_full", "started_at", "full_since")
+_DATETIME_FIELDS = ("last_full", "started_at", "full_since", "discharging_since")
+_POWER_TOPICS = (t.TOTAL_BATTERY_POWER, t.TOTAL_BATTERY_CURRENT)
 
 
 class TopOffManager:
@@ -55,10 +55,11 @@ class TopOffManager:
 
     async def async_load(self) -> None:
         data = await self._store.async_load() or {}
+        # A stored setting that the dataclass no longer has, such as the window of
+        # 0.4, is left out.
         for f in fields(t.Settings):
             if f.name in data.get("settings", {}):
-                value = data["settings"][f.name]
-                setattr(self.settings, f.name, time.fromisoformat(value) if f.name in _TIME_FIELDS else value)
+                setattr(self.settings, f.name, data["settings"][f.name])
         for f in fields(t.Status):
             if f.name in data.get("status", {}):
                 value = data["status"][f.name]
@@ -73,8 +74,6 @@ class TopOffManager:
 
     def _data(self) -> dict[str, Any]:
         settings = asdict(self.settings)
-        for name in _TIME_FIELDS:
-            settings[name] = settings[name].isoformat()
         status = asdict(self.status)
         for name in _DATETIME_FIELDS:
             status[name] = status[name].isoformat() if status[name] else None
@@ -105,6 +104,16 @@ class TopOffManager:
     def _on_metric(self, topic: str) -> None:
         if "state_of_charge" in topic:
             self._record_full(dt_util.utcnow())
+        elif topic in _POWER_TOPICS:
+            self._record_discharge(dt_util.utcnow())
+
+    def _record_discharge(self, now: datetime) -> None:
+        """Keep the start of the running discharge, and save it when it starts or ends."""
+        since = t.update_discharging(self.status.discharging_since, now, t.battery_power(self.coordinator.data))
+        if since != self.status.discharging_since:
+            self.status.discharging_since = since
+            self._save()
+            async_dispatcher_send(self.hass, self.signal)
 
     # -- settings, from the entities --
 
@@ -132,8 +141,9 @@ class TopOffManager:
         async with self._lock:
             now = dt_util.utcnow()
             full = self._record_full(now)
+            self._record_discharge(now)
             state, action = t.decide(
-                self.status, self.settings, dt_util.as_local(now), full,
+                self.status, self.settings, now, full,
                 start_now=start_now, stop_now=stop_now,
             )
             if action == t.ACTION_START:
