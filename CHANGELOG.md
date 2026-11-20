@@ -1,3 +1,9 @@
+## v0.4.1 (fork ColColonCleaner/ha_solar_assistant)
+
+### Fix
+
+- **topoff**: the whole-day grid-charge slot starts at 00:01, because a slot that starts at 00:00 reads as no slot on Luxpower and EG4 inverters, per reports of an EG4 support reply and a Luxpower owner. The first supervised top-off took no AC charge with a slot from 00:00
+
 ## v0.4.0 (fork ColColonCleaner/ha_solar_assistant)
 
 ### Feat

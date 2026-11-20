@@ -81,7 +81,7 @@ class Writes(unittest.TestCase):
     def test_apply_order_and_values(self):
         writes = t.apply_values("inverter_1", 100.0, "Time", "Enabled")
         self.assertEqual(writes, [
-            ("inverter_1/grid_charge_slot_1_start", "00:00"),
+            ("inverter_1/grid_charge_slot_1_start", "00:01"),
             ("inverter_1/grid_charge_slot_1_end", "23:59"),
             ("inverter_1/grid_charge_current", "100"),
             ("inverter_1/grid_charge_according_to", "Time"),
