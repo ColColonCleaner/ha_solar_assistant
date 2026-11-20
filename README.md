@@ -140,6 +140,8 @@ It is **off by default**. The entities sit on the device of the SolarAssistant u
 
 A top-off saves the current values of `grid_charge`, `grid_charge_current`, `grid_charge_according_to`, `grid_charge_slot_1_start` and `grid_charge_slot_1_end` of `inverter_1`. It then sets slot 1 to the whole day, the current to the setting, the mode to the time option and the grid charge to enabled. After the hold, it writes the saved values back, the mode first. The saved values persist, so a restart of Home Assistant during a top-off still restores them. A notification reports each start, end and error. A failed top-off waits for the start button, or for the switch to go off and on.
 
+Measured on an EG4 12000XP with SolarAssistant 2026-08-25: at 53% SOC a top-off drew +96.6 A within a minute, with slot 1 from 00:00. At 95% SOC, just after the batteries were full from the sun, a top-off drew no charge for 12 minutes. Owners report that a BMS refuses charge after a full charge until the SOC falls below about 95%, so a top-off right after a full charge waits for that.
+
 These are the grid-charge settings that SolarAssistant exposes for Luxpower and EG4 inverters. The EG4 12000XP manual limits the AC charge start SOC to 90 % and the AC charge current to 100 A, so the top-off uses a time slot. A unit without these settings, or without a time option, gets an error and no write.
 
 ### Topic filtering
