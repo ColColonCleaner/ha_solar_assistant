@@ -100,38 +100,81 @@ class Owner(unittest.TestCase):
                          ({"device": "batteries", "number": 1}, "battery_2"))
 
 
+class HasEntity(unittest.TestCase):
+    def test_settings_always(self):
+        for platform in ("number", "select", "switch"):
+            self.assertTrue(h.has_entity("inverter_1/x", {"platform": platform}, lambda t: False))
+
+    def test_sensor_when_enabled(self):
+        self.assertTrue(h.has_entity("inverter_1/pv_power", {"platform": "sensor"}, lambda t: True))
+        self.assertTrue(h.has_entity("inverter_1/pv_power", {}, lambda t: True))
+        self.assertFalse(h.has_entity("inverter_1/battery_power", {"platform": "sensor"}, lambda t: False))
+
+    def test_ignored_group(self):
+        self.assertFalse(h.has_entity("inverter_1/x", {"platform": "sensor", "group": "Ignore"}, lambda t: True))
+
+
 class MergedName(unittest.TestCase):
     DEFS = {
         "inverter_1/pv_power": {"name": "PV power"},
         "inverter_1/temperature": {"name": "Temperature"},
+        "inverter_1/battery_state_of_charge": {"name": "Battery state of charge"},
         "total/pv_power": {"name": "PV power"},
         "total/battery_temperature": {"name": "Battery temperature"},
+        "total/battery_state_of_charge": {"name": "Battery state of charge"},
     }
+    ENTITIES = {"inverter_1/pv_power", "inverter_1/temperature"}
 
     def test_a_unique_name_stays(self):
-        self.assertEqual(h.merged_name("Battery temperature", "inverter_1", self.DEFS), "Battery temperature")
-        self.assertEqual(h.merged_name("AC output frequency", "inverter_1", self.DEFS), "AC output frequency")
+        self.assertEqual(h.merged_name("Battery temperature", "inverter_1", self.DEFS, self.ENTITIES), "Battery temperature")
+        self.assertEqual(h.merged_name("AC output frequency", "inverter_1", self.DEFS, self.ENTITIES), "AC output frequency")
 
-    def test_a_name_of_the_inverter_gets_the_prefix(self):
-        self.assertEqual(h.merged_name("PV power", "inverter_1", self.DEFS), "Total PV power")
-        self.assertEqual(h.merged_name("pv POWER", "inverter_1", self.DEFS), "Total pv POWER")
+    def test_a_name_of_an_inverter_entity_gets_the_prefix(self):
+        self.assertEqual(h.merged_name("PV power", "inverter_1", self.DEFS, self.ENTITIES), "Total PV power")
+        self.assertEqual(h.merged_name("pv POWER", "inverter_1", self.DEFS, self.ENTITIES), "Total pv POWER")
+
+    def test_an_inverter_metric_without_an_entity_takes_no_name(self):
+        self.assertEqual(h.merged_name("Battery state of charge", "inverter_1", self.DEFS, self.ENTITIES),
+                         "Battery state of charge")
+        self.assertEqual(h.merged_name("Battery state of charge", "inverter_1", self.DEFS,
+                                       self.ENTITIES | {"inverter_1/battery_state_of_charge"}),
+                         "Total Battery state of charge")
 
 
 class DuplicateTotal(unittest.TestCase):
     INV = {"topic": "inverter_1/pv_power", "device": "inverters", "number": 0, "name": "PV power"}
+    INV_SOC = {"topic": "inverter_1/battery_state_of_charge", "device": "inverters", "number": 0,
+               "name": "Battery state of charge"}
     TOT_PV = {"topic": "total/pv_power", "device": "totals", "number": None, "name": "PV power"}
+    TOT_SOC = {"topic": "total/battery_state_of_charge", "device": "totals", "number": None,
+               "name": "Battery state of charge"}
     TOT_TEMP = {"topic": "total/battery_temperature", "device": "totals", "number": None, "name": "Battery temperature"}
 
+    def defs(self):
+        return {"inverter_1/pv_power": self.INV, "inverter_1/battery_state_of_charge": self.INV_SOC,
+                "total/pv_power": self.TOT_PV, "total/battery_state_of_charge": self.TOT_SOC,
+                "total/battery_temperature": self.TOT_TEMP}
+
     def test_one_inverter(self):
-        defs = {"inverter_1/pv_power": self.INV, "total/pv_power": self.TOT_PV, "total/battery_temperature": self.TOT_TEMP}
-        self.assertTrue(h.is_duplicate_total(self.TOT_PV, defs))
-        self.assertFalse(h.is_duplicate_total(self.TOT_TEMP, defs))
-        self.assertFalse(h.is_duplicate_total(self.INV, defs))
+        entities = {"inverter_1/pv_power"}
+        self.assertTrue(h.is_duplicate_total(self.TOT_PV, self.defs(), entities))
+        self.assertFalse(h.is_duplicate_total(self.TOT_TEMP, self.defs(), entities))
+        self.assertFalse(h.is_duplicate_total(self.INV, self.defs(), entities))
+
+    def test_twin_without_an_entity_keeps_the_total(self):
+        self.assertFalse(h.is_duplicate_total(self.TOT_PV, self.defs(), set()))
+
+    def test_same_name_outside_the_compared_totals_keeps_the_total(self):
+        # v0.5.2 removed total/battery_state_of_charge because an inverter
+        # definition had its name, although that metric had no entity.
+        self.assertFalse(h.is_duplicate_total(self.TOT_SOC, self.defs(), {"inverter_1/pv_power"}))
+        self.assertFalse(h.is_duplicate_total(
+            self.TOT_SOC, self.defs(), {"inverter_1/pv_power", "inverter_1/battery_state_of_charge"}))
 
     def test_two_inverters_keep_every_total(self):
         defs = {"inverter_1/pv_power": self.INV, "inverter_2/pv_power": dict(self.INV, number=1),
                 "total/pv_power": self.TOT_PV}
-        self.assertFalse(h.is_duplicate_total(self.TOT_PV, defs))
+        self.assertFalse(h.is_duplicate_total(self.TOT_PV, defs, {"inverter_1/pv_power", "inverter_2/pv_power"}))
 
 
 class Details(unittest.TestCase):

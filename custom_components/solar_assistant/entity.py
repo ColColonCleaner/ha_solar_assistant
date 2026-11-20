@@ -89,7 +89,9 @@ class SolarAssistantMetricEntity(Entity):
             # On a unit with one inverter the totals join the inverter device.
             owner, prefix = device_owner(defn, coordinator.definitions)
             if owner.get("device") != defn.get("device") and self._attr_name:
-                self._attr_name = merged_name(self._attr_name, prefix, coordinator.definitions)
+                self._attr_name = merged_name(
+                    self._attr_name, prefix, coordinator.definitions, coordinator.entity_topics()
+                )
             device_label, device_id = device_label_and_id(owner)
             self._attr_device_info = DeviceInfo(
                 identifiers={(DOMAIN, f"{scope}_{device_id}")},

@@ -70,7 +70,7 @@ from .const import (
     signal_metric_update,
     signal_new_metric,
 )
-from .health import device_prefix, should_dispatch
+from .health import device_prefix, has_entity, should_dispatch
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -82,6 +82,8 @@ class SolarAssistantCoordinator:
         self.hass = hass
         self.entry = entry
         self.definitions: dict[str, dict[str, Any]] = {}
+        self._entity_topics: frozenset[str] = frozenset()
+        self._entity_topics_key: tuple[int, tuple[str, ...]] | None = None
         self.data: dict[str, Any] = {}
         self._task: asyncio.Task | None = None
         self._stopping = False
@@ -379,6 +381,22 @@ class SolarAssistantCoordinator:
         if topic in ALWAYS_ON_SYSTEM_TOPICS:
             return True
         return any(fnmatch.fnmatchcase(topic, g) for g in self.enabled_sensor_globs())
+
+    def entity_topics(self) -> frozenset[str]:
+        """The topics that have an entity of this entry: each setting, and each enabled read-only metric.
+
+        Definitions only grow, so the count of definitions and the enabled globs
+        key the cache. Each entity of a setup asks, and a rebuild matches every
+        topic against every glob.
+        """
+        globs = tuple(self.enabled_sensor_globs())
+        key = (len(self.definitions), globs)
+        if key != self._entity_topics_key:
+            self._entity_topics = frozenset(
+                t for t, d in self.definitions.items() if has_entity(t, d, self.should_create_sensor)
+            )
+            self._entity_topics_key = key
+        return self._entity_topics
 
     def _build_topic_filters(self) -> list[TopicFilter]:
         """Server-side subscription list. Settings topics are always added so they receive updates."""

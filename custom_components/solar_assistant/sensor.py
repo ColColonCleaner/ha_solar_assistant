@@ -56,9 +56,9 @@ async def async_setup_entry(
         if not coordinator.should_create_sensor(topic):
             return
         known.add(topic)
-        if is_duplicate_total(defn, coordinator.definitions):
+        if is_duplicate_total(defn, coordinator.definitions, coordinator.entity_topics()):
             # On a unit with one inverter this total repeats an inverter
-            # sensor, so it gets no entity, and an entity of an older
+            # entity, so it gets no entity, and an entity of an older
             # version leaves the registry.
             old = registry.async_get_entity_id("sensor", DOMAIN, f"{entry.unique_id}_{topic}")
             if old is not None:

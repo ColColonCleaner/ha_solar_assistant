@@ -5,6 +5,7 @@ No Home Assistant imports, so the tests run without it.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Collection
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -105,31 +106,57 @@ def device_owner(defn: dict[str, Any], definitions: dict[str, dict[str, Any]]) -
     return {"device": sample.get("device"), "number": sample.get("number")}, inverters[0]
 
 
-def is_duplicate_total(defn: dict[str, Any], definitions: dict[str, dict[str, Any]]) -> bool:
-    """Whether a total repeats a metric of the only inverter, such as total/pv_power.
+_SETTING_PLATFORMS = ("number", "select", "switch")
 
-    With one inverter, SolarAssistant's total is the sum over that inverter, so a
-    total with the name of an inverter metric holds the same value. On the house
-    of Projects T0323 every update of 24 h agreed for PV, load and grid power.
+# Totals whose value equals the metric of the same topic name of the only
+# inverter. Each pair agreed in every update of 24 h of recorder data on an
+# EG4 12000XP (Projects T0323 A015). No other total was compared.
+_SAME_AS_INVERTER = ("pv_power", "load_power", "grid_power")
+
+
+def has_entity(topic: str, defn: dict[str, Any], sensor_enabled: Callable[[str], bool]) -> bool:
+    """Whether a metric gets an entity of the entry.
+
+    Each setting does. A read-only metric does when its topic is enabled, which
+    ``sensor_enabled`` decides from the options of the entry.
+    """
+    platform = defn.get("platform")
+    if platform in _SETTING_PLATFORMS:
+        return True
+    return platform in (None, "sensor") and defn.get("group") != "Ignore" and sensor_enabled(topic)
+
+
+def is_duplicate_total(
+    defn: dict[str, Any], definitions: dict[str, dict[str, Any]], entity_topics: Collection[str]
+) -> bool:
+    """Whether a total repeats an entity of the only inverter, such as total/pv_power.
+
+    Only a total in ``_SAME_AS_INVERTER`` qualifies, and only while the inverter
+    metric of the same topic name has an entity, so no value loses its entity.
+    v0.5.2 compared names against every inverter definition instead, and so
+    removed 13 totals whose inverter twin has no entity.
     """
     owner, prefix = device_owner(defn, definitions)
     if owner.get("device") == defn.get("device"):
         return False
-    name = str(defn.get("name") or "")
-    return merged_name(name, prefix, definitions) != name
+    suffix = str(defn.get("topic") or "").split("/", 1)[-1]
+    return suffix in _SAME_AS_INVERTER and f"{prefix}/{suffix}" in entity_topics
 
 
-def merged_name(name: str, owner_prefix: str, definitions: dict[str, dict[str, Any]]) -> str:
+def merged_name(
+    name: str, owner_prefix: str, definitions: dict[str, dict[str, Any]], entity_topics: Collection[str]
+) -> str:
     """The name of a total on the inverter device.
 
     It keeps its own name, such as "Battery temperature". Only a name that an
-    inverter metric already has, such as "PV power", reads "Total PV power",
-    so no two sensors of the device share a name.
+    entity of the inverter already has reads "Total ...", so no two sensors of
+    the device share a name. An inverter metric without an entity takes no name
+    on the device, so it does not count.
     """
     taken = {
         str(d.get("name") or "").casefold()
         for t, d in definitions.items()
-        if t.startswith(owner_prefix + "/")
+        if t.startswith(owner_prefix + "/") and t in entity_topics
     }
     return f"Total {name}" if name.casefold() in taken else name
 

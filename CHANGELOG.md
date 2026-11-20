@@ -1,3 +1,10 @@
+## v0.5.3 (fork ColColonCleaner/ha_solar_assistant)
+
+### Fix
+
+- **sensor**: v0.5.2 removed every total whose name an inverter definition also had, 16 on an EG4 12000XP, although 13 of those inverter metrics have no entity. So the battery state of charge, power, voltage, current, temperature, state of health, capacity and cell voltages, the grid voltage and frequency, and the AC output voltage and frequency lost their entity. Now only total/pv_power, total/load_power and total/grid_power are dropped, the totals whose values were compared, and only while the inverter metric of the same topic name has an entity. The 13 totals come back with their old entity IDs, because HA restores a deleted entity
+- **devices**: a total on the inverter device reads "Total ..." only when an entity of the inverter has the same name. An inverter metric without an entity no longer counts
+
 ## v0.5.2 (fork ColColonCleaner/ha_solar_assistant)
 
 ### Fix
