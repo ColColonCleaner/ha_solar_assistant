@@ -1,3 +1,9 @@
+## v0.5.2 (fork ColColonCleaner/ha_solar_assistant)
+
+### Fix
+
+- **sensor**: on a unit with one inverter, a total that repeats an inverter metric of the same name, such as total/pv_power, total/load_power and total/grid_power, gets no entity, and the entity of an older version leaves the registry. On the EG4 12000XP every update of 24 hours agreed. So no sensor of the inverter device reads "Total ..." anymore
+
 ## v0.5.1 (fork ColColonCleaner/ha_solar_assistant)
 
 ### Fix

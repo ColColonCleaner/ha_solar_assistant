@@ -7,12 +7,14 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import derived_entities, topoff_entities
 from .const import DOMAIN
 from .coordinator import SolarAssistantConfigEntry, SolarAssistantCoordinator
 from .entity import SolarAssistantMetricEntity
+from .health import is_duplicate_total
 from .precision import is_numeric_metric, metric_unit, parse_numeric, sensor_display_precision
 
 _LOGGER = logging.getLogger(__name__)
@@ -41,10 +43,11 @@ async def async_setup_entry(
     derived_entities.add_with_first_pack(
         hass, entry, coordinator, async_add_entities, derived_entities.spread_sensors
     )
+    registry = er.async_get(hass)
     known: set[str] = set()
 
     @callback
-    def _on_new_metric(topic: str) -> None:
+    def _consider(topic: str) -> None:
         if topic in known:
             return
         defn = coordinator.definitions.get(topic)
@@ -53,21 +56,24 @@ async def async_setup_entry(
         if not coordinator.should_create_sensor(topic):
             return
         known.add(topic)
+        if is_duplicate_total(defn, coordinator.definitions):
+            # On a unit with one inverter this total repeats an inverter
+            # sensor, so it gets no entity, and an entity of an older
+            # version leaves the registry.
+            old = registry.async_get_entity_id("sensor", DOMAIN, f"{entry.unique_id}_{topic}")
+            if old is not None:
+                _LOGGER.info("Removing %s, which repeats an inverter sensor", old)
+                registry.async_remove(old)
+            return
         async_add_entities([SolarAssistantSensor(coordinator, entry, topic, defn)])
 
     from homeassistant.helpers.dispatcher import async_dispatcher_connect
     entry.async_on_unload(
-        async_dispatcher_connect(hass, coordinator.signal_new_metric, _on_new_metric)
+        async_dispatcher_connect(hass, coordinator.signal_new_metric, _consider)
     )
 
-    for topic, defn in list(coordinator.definitions.items()):
-        if not _is_for_us(defn):
-            continue
-        if not coordinator.should_create_sensor(topic):
-            continue
-        if topic not in known:
-            known.add(topic)
-            async_add_entities([SolarAssistantSensor(coordinator, entry, topic, defn)])
+    for topic in list(coordinator.definitions):
+        _consider(topic)
 
 
 class SolarAssistantSensor(SolarAssistantMetricEntity, SensorEntity):

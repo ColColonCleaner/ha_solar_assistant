@@ -105,6 +105,20 @@ def device_owner(defn: dict[str, Any], definitions: dict[str, dict[str, Any]]) -
     return {"device": sample.get("device"), "number": sample.get("number")}, inverters[0]
 
 
+def is_duplicate_total(defn: dict[str, Any], definitions: dict[str, dict[str, Any]]) -> bool:
+    """Whether a total repeats a metric of the only inverter, such as total/pv_power.
+
+    With one inverter, SolarAssistant's total is the sum over that inverter, so a
+    total with the name of an inverter metric holds the same value. On the house
+    of Projects T0323 every update of 24 h agreed for PV, load and grid power.
+    """
+    owner, prefix = device_owner(defn, definitions)
+    if owner.get("device") == defn.get("device"):
+        return False
+    name = str(defn.get("name") or "")
+    return merged_name(name, prefix, definitions) != name
+
+
 def merged_name(name: str, owner_prefix: str, definitions: dict[str, dict[str, Any]]) -> str:
     """The name of a total on the inverter device.
 

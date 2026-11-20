@@ -117,6 +117,23 @@ class MergedName(unittest.TestCase):
         self.assertEqual(h.merged_name("pv POWER", "inverter_1", self.DEFS), "Total pv POWER")
 
 
+class DuplicateTotal(unittest.TestCase):
+    INV = {"topic": "inverter_1/pv_power", "device": "inverters", "number": 0, "name": "PV power"}
+    TOT_PV = {"topic": "total/pv_power", "device": "totals", "number": None, "name": "PV power"}
+    TOT_TEMP = {"topic": "total/battery_temperature", "device": "totals", "number": None, "name": "Battery temperature"}
+
+    def test_one_inverter(self):
+        defs = {"inverter_1/pv_power": self.INV, "total/pv_power": self.TOT_PV, "total/battery_temperature": self.TOT_TEMP}
+        self.assertTrue(h.is_duplicate_total(self.TOT_PV, defs))
+        self.assertFalse(h.is_duplicate_total(self.TOT_TEMP, defs))
+        self.assertFalse(h.is_duplicate_total(self.INV, defs))
+
+    def test_two_inverters_keep_every_total(self):
+        defs = {"inverter_1/pv_power": self.INV, "inverter_2/pv_power": dict(self.INV, number=1),
+                "total/pv_power": self.TOT_PV}
+        self.assertFalse(h.is_duplicate_total(self.TOT_PV, defs))
+
+
 class Details(unittest.TestCase):
     DEFS = {
         "inverter_1/serial_number": {"group": "Info", "name": "Serial number"},
