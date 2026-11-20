@@ -33,10 +33,7 @@ REQUIRED = (GRID_CHARGE, CURRENT, ACCORDING_TO, SLOT_START, SLOT_END)
 APPLY_ORDER = (SLOT_START, SLOT_END, CURRENT, ACCORDING_TO, GRID_CHARGE)
 RESTORE_ORDER = (ACCORDING_TO, CURRENT, SLOT_START, SLOT_END, GRID_CHARGE)
 
-# A slot that starts at 00:00 reads as no slot on Luxpower and EG4 inverters,
-# as an EG4 support reply relayed on the DIY Solar Power Forum and a Luxpower
-# SNA owner report, so the whole-day slot starts at 00:01.
-WHOLE_DAY = ("00:01", "23:59")
+WHOLE_DAY = ("00:00", "23:59")
 
 STATE_DISABLED = "disabled"
 STATE_IDLE = "idle"
