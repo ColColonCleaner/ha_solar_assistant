@@ -1,3 +1,9 @@
+## v0.5.4 (fork ColColonCleaner/ha_solar_assistant)
+
+### Feat
+
+- **sensor**: a minute after the first discovery, each sensor takes over the entity ID of its SolarAssistant MQTT entity of the same topic, when that MQTT entity is deleted and its ID is free. The rename is the rename of the HA UI, so the recorder continues the history of the MQTT entity, and automations and dashboards that name the MQTT ID work again. Each topic is adopted once, so a later rename by hand holds
+
 ## v0.5.3 (fork ColColonCleaner/ha_solar_assistant)
 
 ### Fix

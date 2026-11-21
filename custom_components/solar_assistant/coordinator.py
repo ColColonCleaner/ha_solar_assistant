@@ -19,6 +19,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.storage import Store
 from homeassistant.util.dt import utcnow
 
 from py_solar_assistant import (
@@ -71,8 +72,11 @@ from .const import (
     signal_new_metric,
 )
 from .health import device_prefix, has_entity, should_dispatch
+from .mqtt_ids import MQTT_PLATFORM, mqtt_unique_id, plan_adoption
 
 _LOGGER = logging.getLogger(__name__)
+
+MQTT_IDS_STORAGE_VERSION = 1
 
 
 class SolarAssistantCoordinator:
@@ -104,6 +108,10 @@ class SolarAssistantCoordinator:
         self._flush_unsub: Any = None
         self.last_change: dict[str, datetime] = {}
         self._prune_scheduled = False
+        # The topics whose sensor took the entity ID of its SolarAssistant MQTT entity
+        self._mqtt_ids_store: Store[dict[str, Any]] = Store(
+            hass, MQTT_IDS_STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.mqtt_ids"
+        )
         # Setting writes
         self._write_lock = asyncio.Lock()
         self._verify_writes = True
@@ -256,7 +264,48 @@ class SolarAssistantCoordinator:
             # The entities of the discovery register within moments. A minute
             # later, a device of this entry with no entity is left over.
             self._prune_scheduled = True
-            self.entry.async_on_unload(async_call_later(self.hass, PRUNE_DELAY_S, self._prune_devices))
+            self.entry.async_on_unload(async_call_later(self.hass, PRUNE_DELAY_S, self._after_discovery))
+
+    @callback
+    def _after_discovery(self, now: Any) -> None:
+        """Clean up a minute after the first discovery, when its entities are registered."""
+        self._prune_devices(now)
+        self.entry.async_create_background_task(
+            self.hass, self._async_adopt_mqtt_ids(), f"{DOMAIN} adopt MQTT entity IDs"
+        )
+
+    async def _async_adopt_mqtt_ids(self) -> None:
+        """Give each sensor the entity ID of its deleted SolarAssistant MQTT entity, once per topic.
+
+        The rename is the rename of the HA UI, so the recorder continues the
+        history of the MQTT entity under its ID (Projects T0323 A016). A topic
+        counts as done after its rename, so a later rename by hand holds.
+        """
+        ent_reg = er.async_get(self.hass)
+        stored = await self._mqtt_ids_store.async_load() or {}
+        done = set(stored.get("topics", []))
+        scope = f"{self.entry.unique_id}_"
+        sensors = [
+            (e.entity_id, e.unique_id[len(scope):])
+            for e in er.async_entries_for_config_entry(ent_reg, self.entry.entry_id)
+            if e.domain == "sensor" and e.unique_id.startswith(scope)
+        ]
+        twins: dict[str, str] = {}
+        for _entity_id, topic in sensors:
+            deleted = ent_reg.deleted_entities.get(("sensor", MQTT_PLATFORM, mqtt_unique_id(topic)))
+            if deleted is not None:
+                twins[topic] = deleted.entity_id
+        renames, matched = plan_adoption(sensors, twins, ent_reg.async_is_registered, done)
+        for entity_id, target, topic in renames:
+            try:
+                ent_reg.async_update_entity(entity_id, new_entity_id=target)
+            except ValueError as err:
+                _LOGGER.warning("Could not rename %s to %s: %s", entity_id, target, err)
+                continue
+            _LOGGER.info("Renamed %s to %s, the ID of its SolarAssistant MQTT entity", entity_id, target)
+            matched.add(topic)
+        if matched - done:
+            await self._mqtt_ids_store.async_save({"topics": sorted(done | matched)})
 
     @callback
     def _prune_devices(self, _now: Any) -> None:
