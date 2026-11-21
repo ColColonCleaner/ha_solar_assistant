@@ -1,3 +1,14 @@
+## v0.5.5 (fork ColColonCleaner/ha_solar_assistant)
+
+### Feat
+
+- **options**: every metric is enabled by default, with the topic filter `*` that the WebSocket API documents, and `system/*`. Before, the default was the server's curated set of 10 globs. A metric deselected in the options gets no sensor. An entry with a saved selection keeps it
+- **coordinator**: a settings topic joins the subscription only when no enabled glob covers it
+
+### Fix
+
+- **devices**: the metric "Connection type", such as Serial, no longer becomes the model of the device. "Model number" becomes the model ID, and a device without a model metric clears the model that v0.4.0 to v0.5.4 stored. "Serial number" and "Software version" or "Firmware" still give the serial number and the firmware
+
 ## v0.5.4 (fork ColColonCleaner/ha_solar_assistant)
 
 ### Feat

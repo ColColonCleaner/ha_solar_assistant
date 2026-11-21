@@ -161,18 +161,24 @@ def merged_name(
     return f"Total {name}" if name.casefold() in taken else name
 
 
+# Each metric takes the first kind whose words its name holds, in this order, so
+# "Model number" becomes the model ID and never the model name. The word "type"
+# names no model: "Connection type" holds a link, such as Serial, on the
+# inverter and on each pack of a Luxpower SNA unit (Projects T0323 A022).
 _DETAIL_WORDS = (
-    ("serial_number", ("serial",)),
-    ("model", ("model", "type")),
-    ("sw_version", ("firmware", "software version", "version")),
+    ("serial_number", ("serial number",)),
+    ("model_id", ("model number", "model id")),
+    ("model", ("model",)),
+    ("sw_version", ("firmware", "software version")),
 )
 
 
 def device_details(definitions: dict[str, dict[str, Any]], data: dict[str, Any], prefix: str) -> dict[str, str]:
-    """The model, serial number and firmware of a device, from its Info metrics (upstream issue #11).
+    """The model, model ID, serial number and firmware of a device, from its Info metrics (upstream issue #11).
 
     SolarAssistant names these metrics per driver, so the match goes by words in
-    the metric name. The first match of each kind wins, in topic order.
+    the metric name. Each metric counts for one kind at most, and the first
+    metric of each kind wins, in topic order.
     """
     details: dict[str, str] = {}
     for topic in sorted(definitions):
@@ -186,7 +192,8 @@ def device_details(definitions: dict[str, dict[str, Any]], data: dict[str, Any],
             continue
         name = str(defn.get("name") or "").casefold()
         for key, words in _DETAIL_WORDS:
-            if key not in details and any(w in name for w in words):
-                details[key] = str(value).strip()
+            if any(w in name for w in words):
+                if key not in details:
+                    details[key] = str(value).strip()
                 break
     return details

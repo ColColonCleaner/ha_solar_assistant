@@ -201,6 +201,40 @@ class Details(unittest.TestCase):
         self.assertEqual(h.device_details(self.DEFS, {}, "inverter_1"), {})
         self.assertEqual(h.device_details(self.DEFS, self.DATA, "battery_1"), {})
 
+    # The Info metrics of the Luxpower SNA unit of Projects T0323, from its diagnostics.
+    LUX_DEFS = {
+        "inverter_1/connection_type": {"group": "Info", "name": "Connection type"},
+        "inverter_1/model_number": {"group": "Info", "name": "Model number"},
+        "inverter_1/protocol_mode": {"group": "Info", "name": "Protocol mode"},
+        "inverter_1/serial_number": {"group": "Info", "name": "Serial number"},
+        "battery_1/connection_type": {"group": "Info", "name": "Connection type"},
+        "battery_1/serial_number": {"group": "Info", "name": "Serial number"},
+    }
+    LUX_DATA = {
+        "inverter_1/connection_type": "Serial",
+        "inverter_1/model_number": "0P0",
+        "inverter_1/protocol_mode": "Active",
+        "inverter_1/serial_number": "54730P0329",
+        "battery_1/connection_type": "Serial",
+        "battery_1/serial_number": "BJ4D280000",
+    }
+
+    def test_connection_type_is_no_model(self):
+        self.assertEqual(h.device_details(self.LUX_DEFS, self.LUX_DATA, "inverter_1"),
+                         {"model_id": "0P0", "serial_number": "54730P0329"})
+        self.assertEqual(h.device_details(self.LUX_DEFS, self.LUX_DATA, "battery_1"),
+                         {"serial_number": "BJ4D280000"})
+
+    def test_a_model_number_never_becomes_the_model_name(self):
+        defs = {"inverter_1/a": {"group": "Info", "name": "Model ID"},
+                "inverter_1/b": {"group": "Info", "name": "Model number"}}
+        data = {"inverter_1/a": "X1", "inverter_1/b": "X2"}
+        self.assertEqual(h.device_details(defs, data, "inverter_1"), {"model_id": "X1"})
+
+    def test_a_protocol_version_is_no_firmware(self):
+        defs = {"inverter_1/protocol_version": {"group": "Info", "name": "Protocol version"}}
+        self.assertEqual(h.device_details(defs, {"inverter_1/protocol_version": "2"}, "inverter_1"), {})
+
 
 if __name__ == "__main__":
     unittest.main()

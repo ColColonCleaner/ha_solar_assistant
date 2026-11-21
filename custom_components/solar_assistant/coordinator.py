@@ -448,11 +448,13 @@ class SolarAssistantCoordinator:
         return self._entity_topics
 
     def _build_topic_filters(self) -> list[TopicFilter]:
-        """Server-side subscription list. Settings topics are always added so they receive updates."""
+        """Server-side subscription list. Each settings topic is added unless a glob covers it, so it receives updates."""
         base = self.enabled_sensor_globs()
-        base_set = set(base)
+        globs = list(base)
         for topic, defn in self.definitions.items():
-            if defn.get("platform") in ("number", "select", "switch") and topic not in base_set:
+            if defn.get("platform") in ("number", "select", "switch") and not any(
+                fnmatch.fnmatchcase(topic, g) for g in globs
+            ):
                 base.append(topic)
         # The server streams system/* only when named, and older units' fallback
         # push is filtered by this same list.

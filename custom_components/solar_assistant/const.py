@@ -19,26 +19,18 @@ AUTH_CLOUD = "cloud"
 # Options keys
 CONF_ENABLED_TOPICS = "enabled_topics"
 
-# Curated default — same set the SA server uses when no client filter is sent.
-# Mirrors @default_topics in solar_assistant_web/channels/metrics.ex.
-DEFAULT_CURATED_GLOBS = (
-    "total/*",
-    "battery_*/voltage",
-    "battery_*/state_of_charge",
-    "battery_*/power",
-    "battery_*/temperature",
-    "inverter_*/pv_power",
-    "inverter_*/load_power",
-    "inverter_*/grid_power",
-    "inverter_*/device_mode",
-    "inverter_*/temperature",
-)
-
 SYSTEM_PREFIX = "system/"
 # Never deselectable: docs/entity-contract.md names site_id as the unit's
 # identifier, and software_version is the unit device's firmware version.
 ALWAYS_ON_SYSTEM_TOPICS = ("system/site_id", "system/software_version")
-DEFAULT_ENABLED_GLOBS = (*DEFAULT_CURATED_GLOBS, f"{SYSTEM_PREFIX}*")
+# Every metric by default, so a sensor exists for each topic until the options
+# deselect it. The WebSocket API documents [{"topic": "*"}] as the filter that
+# receives all topics. The server's own default set, which the options used
+# before, held only 10 globs, and so left the inverter battery current, grid
+# voltage and PV voltage without a sensor (Projects T0323 A022). system/* stays
+# named, because the client library says the unit sends its own metrics only
+# when a filter names them.
+DEFAULT_ENABLED_GLOBS = ("*", f"{SYSTEM_PREFIX}*")
 
 # Default host suggestion (mDNS) for the very first local-password unit
 DEFAULT_LOCAL_HOST = "solar-assistant.local"

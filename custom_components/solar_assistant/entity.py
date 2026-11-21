@@ -103,6 +103,12 @@ class SolarAssistantMetricEntity(Entity):
             details = device_details(coordinator.definitions, coordinator.data, prefix)
             for key, value in details.items():
                 self._attr_device_info[key] = value
+            # The device registry keeps a field that DeviceInfo leaves out, and
+            # None clears it. v0.4.0 to v0.5.4 stored the model "Serial" from the
+            # metric "Connection type", so a device without a model metric
+            # clears the field.
+            if "model" not in details:
+                self._attr_device_info["model"] = None
 
     @property
     def available(self) -> bool:

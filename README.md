@@ -146,8 +146,11 @@ These are the grid-charge settings that SolarAssistant exposes for Luxpower and 
 
 ### Topic filtering
 
-By default, the integration subscribes to a curated set of the most useful live metrics. To choose which entities appear, go to Settings →
-Devices & Services → SolarAssistant → **Configure**.
+By default, the integration subscribes to every metric of the unit, and each one gets a sensor. To choose which entities appear, go to Settings → Devices & Services → SolarAssistant → **Configure**, and deselect the metrics you do not want. A saved selection stays as it is.
+
+### Entity IDs of an earlier MQTT setup
+
+A minute after it starts, the integration gives each sensor the entity ID of the SolarAssistant MQTT entity of the same topic, when you deleted that MQTT entity and its ID is free. Home Assistant then continues the history of the MQTT entity under that ID. Each topic is adopted once, so a later rename of yours holds.
 
 ### Integration
 
