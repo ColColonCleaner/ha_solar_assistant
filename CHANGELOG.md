@@ -1,3 +1,10 @@
+## v0.5.7 (fork ColColonCleaner/ha_solar_assistant)
+
+### Fix
+
+- **binary_sensor**: a read-only metric with an on/off value is a binary sensor, such as Quick charge, ECO mode, Buzzer, Shared battery, On-grid always on, the two peak-shaving values and the AC couple values of a Luxpower SNA unit. Since v0.5.5 each one was a sensor, and the five with the unit `Enabled` showed `unknown`, because Home Assistant takes a state with a unit as a number. The sensor of v0.5.5 or v0.5.6 leaves the registry
+- **sensor**: the unit `Enabled` is no unit for Home Assistant
+
 ## v0.5.6 (fork ColColonCleaner/ha_solar_assistant)
 
 ### Feat

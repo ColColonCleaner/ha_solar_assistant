@@ -64,8 +64,17 @@ _NUMBER_STEP_BY_UNIT: dict[str, float] = {
 
 _MAX_STEP_DECIMALS = 3
 
-# Units that SolarAssistant gives to a text value.
-_TEXT_UNITS = frozenset({"hhmm"})
+# SolarAssistant puts this word into the unit field of some on/off values, as in
+# {"topic": "inverter_1/quick_charge", "unit": "Enabled", "value": false}.
+_BOOLEAN_UNIT = "Enabled"
+
+# Units that SolarAssistant gives to a value that is no number. A unit makes
+# Home Assistant require a numeric state, so a sensor with the unit Enabled
+# and a bool value showed unknown.
+_TEXT_UNITS = frozenset({"hhmm", _BOOLEAN_UNIT})
+
+_TRUE_WORDS = frozenset({"true", "on", "enabled", "yes"})
+_FALSE_WORDS = frozenset({"false", "off", "disabled", "no"})
 
 # Units that the Luxpower driver of SolarAssistant 2026-08-25 labels wrong, by
 # topic suffix: (the unit sent, the unit of the value). The smart load start PV
@@ -129,6 +138,34 @@ def metric_unit(defn: dict[str, Any]) -> str | None:
 def is_numeric_metric(defn: dict[str, Any]) -> bool:
     """Whether Home Assistant treats a sensor of this metric as numeric."""
     return bool(metric_unit(defn) or defn.get("state_class"))
+
+
+def is_boolean_metric(defn: dict[str, Any], value: Any) -> bool:
+    """Whether a read-only metric holds an on/off value, which is a binary sensor in Home Assistant.
+
+    The value decides, because a definition names no type. The unit Enabled
+    also decides, so the metric is a binary sensor before its first value. A
+    setting with a control of its own, platform number, select or switch, is none.
+    """
+    if defn.get("platform") not in (None, "sensor"):
+        return False
+    unit = defn.get("unit_of_measurement") or defn.get("unit")
+    return isinstance(value, bool) or unit == _BOOLEAN_UNIT
+
+
+def boolean_state(value: Any) -> bool | None:
+    """The on/off state in ``value``, or None when it holds none."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value) if value in (0, 1) else None
+    if isinstance(value, str):
+        word = value.strip().casefold()
+        if word in _TRUE_WORDS:
+            return True
+        if word in _FALSE_WORDS:
+            return False
+    return None
 
 
 def sensor_display_precision(topic: str, defn: dict[str, Any]) -> int | None:

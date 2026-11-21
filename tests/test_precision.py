@@ -138,5 +138,46 @@ class SelectOptions(unittest.TestCase):
         self.assertEqual(p.select_options({"options": ["A"]}, None), ["A"])
 
 
+class BooleanMetrics(unittest.TestCase):
+    # Rows of GET /api/v1/metrics of a Luxpower SNA unit, SolarAssistant 2026-08-25.
+    QUICK = {"topic": "inverter_1/quick_charge", "unit": "Enabled", "group": "Settings", "platform": "sensor"}
+    PEAK = {"topic": "inverter_1/grid_peak_shaving", "group": "Settings", "platform": "sensor"}
+    MODE = {"topic": "inverter_1/device_mode", "group": "Status", "platform": "sensor"}
+
+    def test_a_bool_value_is_boolean(self):
+        self.assertTrue(p.is_boolean_metric(self.PEAK, False))
+        self.assertTrue(p.is_boolean_metric(self.PEAK, True))
+        self.assertTrue(p.is_boolean_metric({"topic": "inverter_1/ac_couple_active"}, False))
+
+    def test_the_unit_enabled_is_boolean_before_a_value_arrives(self):
+        self.assertTrue(p.is_boolean_metric(self.QUICK, None))
+        self.assertTrue(p.is_boolean_metric(self.QUICK, False))
+
+    def test_text_and_numbers_are_not_boolean(self):
+        self.assertFalse(p.is_boolean_metric(self.MODE, "Solar/Battery"))
+        self.assertFalse(p.is_boolean_metric({"topic": "inverter_1/battery_packs"}, 1))
+        self.assertFalse(p.is_boolean_metric({"topic": "inverter_1/generator"}, "Disabled"))
+
+    def test_a_setting_with_a_control_is_not_a_binary_sensor(self):
+        for platform in ("number", "select", "switch"):
+            self.assertFalse(p.is_boolean_metric(dict(self.QUICK, platform=platform), False))
+
+    def test_the_unit_enabled_is_no_unit_for_home_assistant(self):
+        # v0.5.5 and v0.5.6 passed the unit on, so the sensor took the bool as a number and showed unknown.
+        self.assertIsNone(p.metric_unit(self.QUICK))
+        self.assertFalse(p.is_numeric_metric(self.QUICK))
+
+    def test_state(self):
+        self.assertIs(p.boolean_state(True), True)
+        self.assertIs(p.boolean_state(False), False)
+        self.assertIs(p.boolean_state("Enabled"), True)
+        self.assertIs(p.boolean_state("disabled"), False)
+        self.assertIs(p.boolean_state(1), True)
+        self.assertIs(p.boolean_state(0), False)
+        self.assertIsNone(p.boolean_state(None))
+        self.assertIsNone(p.boolean_state("Solar/Battery"))
+        self.assertIsNone(p.boolean_state(2))
+
+
 if __name__ == "__main__":
     unittest.main()

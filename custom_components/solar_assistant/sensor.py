@@ -15,7 +15,13 @@ from .const import DOMAIN
 from .coordinator import SolarAssistantConfigEntry, SolarAssistantCoordinator
 from .entity import SolarAssistantMetricEntity
 from .health import is_duplicate_total
-from .precision import is_numeric_metric, metric_unit, parse_numeric, sensor_display_precision
+from .precision import (
+    is_boolean_metric,
+    is_numeric_metric,
+    metric_unit,
+    parse_numeric,
+    sensor_display_precision,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,6 +53,14 @@ async def async_setup_entry(
     known: set[str] = set()
 
     @callback
+    def _remove_sensor(topic: str, why: str) -> None:
+        """Remove the sensor that an older version made for a topic, if the registry holds one."""
+        old = registry.async_get_entity_id("sensor", DOMAIN, f"{entry.unique_id}_{topic}")
+        if old is not None:
+            _LOGGER.info("Removing %s, which %s", old, why)
+            registry.async_remove(old)
+
+    @callback
     def _consider(topic: str) -> None:
         if topic in known:
             return
@@ -60,10 +74,12 @@ async def async_setup_entry(
             # On a unit with one inverter this total repeats an inverter
             # entity, so it gets no entity, and an entity of an older
             # version leaves the registry.
-            old = registry.async_get_entity_id("sensor", DOMAIN, f"{entry.unique_id}_{topic}")
-            if old is not None:
-                _LOGGER.info("Removing %s, which repeats an inverter sensor", old)
-                registry.async_remove(old)
+            _remove_sensor(topic, "repeats an inverter sensor")
+            return
+        if is_boolean_metric(defn, coordinator.data.get(topic)):
+            # An on/off value is a binary sensor, which binary_sensor.py
+            # makes. v0.5.5 and v0.5.6 made a sensor for it.
+            _remove_sensor(topic, "is a binary sensor now")
             return
         async_add_entities([SolarAssistantSensor(coordinator, entry, topic, defn)])
 
