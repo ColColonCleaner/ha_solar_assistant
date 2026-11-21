@@ -86,6 +86,8 @@ class SolarAssistantCoordinator:
         self.hass = hass
         self.entry = entry
         self.definitions: dict[str, dict[str, Any]] = {}
+        # The metrics of the group Ignore, by topic, with their definition and value
+        self.ignored: dict[str, dict[str, Any]] = {}
         self._entity_topics: frozenset[str] = frozenset()
         self._entity_topics_key: tuple[int, tuple[str, ...]] | None = None
         self.data: dict[str, Any] = {}
@@ -245,6 +247,10 @@ class SolarAssistantCoordinator:
         updated: list[str] = []
         for m in metrics:
             if m.group == "Ignore":
+                # The unit marks these metrics Ignore and streams no update of
+                # them, so they get no entity. The diagnostics list them, so a
+                # metric that HA lacks can be traced to this group.
+                self.ignored[m.topic] = {"definition": _defn_for(m), "value": m.value}
                 continue
             topic = m.topic
             is_new = topic not in self.definitions

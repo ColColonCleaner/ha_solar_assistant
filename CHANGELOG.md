@@ -1,3 +1,9 @@
+## v0.5.6 (fork ColColonCleaner/ha_solar_assistant)
+
+### Feat
+
+- **diagnostics**: the download lists the metrics of the group Ignore under `ignored_topics`, with their definition and value. The unit streams no update of them, so they get no entity, and the list shows which metric that is
+
 ## v0.5.5 (fork ColColonCleaner/ha_solar_assistant)
 
 ### Feat

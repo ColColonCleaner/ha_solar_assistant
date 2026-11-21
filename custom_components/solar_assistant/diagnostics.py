@@ -43,6 +43,7 @@ async def async_get_config_entry_diagnostics(
             topic: {"definition": coordinator.definitions[topic], "value": coordinator.data.get(topic)}
             for topic in sorted(coordinator.definitions)
         },
+        "ignored_topics": {topic: coordinator.ignored[topic] for topic in sorted(coordinator.ignored)},
         "topoff": None if topoff is None else {
             "settings": {k: _iso(v) for k, v in asdict(topoff.settings).items()},
             "status": {k: _iso(v) for k, v in asdict(topoff.status).items()},
